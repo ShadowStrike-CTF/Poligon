@@ -8,7 +8,7 @@ Web: poligon --serve → localhost:7333 (generator form + challenge host in one 
 
 Port 7333 ALWAYS (distinct from Sarissa 7331, Treska 7332).
 
-## Core library (poligon/core/) — shared, no duplication
+## Core library (src/poligon/core/) — shared, no duplication
 generate.py — generate(template, difficulty, seed, flag_prefix) — SEED APPLIED HERE FIRST
 templates/android.py — Template A (Pillow EXIF + Faker SQLite data)
 templates/filesystem.py — Template B
