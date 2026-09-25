@@ -10,6 +10,7 @@ from pathlib import Path
 from poligon.core.flag import generate_flag, store_solution
 from poligon.core.history import append_entry
 from poligon.core.templates.android import generate_android
+from poligon.core.templates.filesystem import generate_filesystem
 
 TEMPLATES = ("android", "filesystem", "evidence")
 DIFFICULTIES = (1, 2, 3)
@@ -19,6 +20,15 @@ ANDROID_HINTS = [
     "Messaging apps keep their history in a SQLite database.",
     "Not every message body is plain text — base64 is a common disguise.",
     "Photo metadata can corroborate part of the flag.",
+]
+
+FILESYSTEM_HINTS = [
+    "Start in the user's home directory — Documents is a good first stop.",
+    "File extensions lie; check what a file actually contains.",
+    "The displayed file name is not always the real one — look for "
+    "Unicode direction tricks.",
+    "Long runs of letters and digits, sometimes ending in '=', are often "
+    "base64.",
 ]
 
 
@@ -38,9 +48,9 @@ def generate(template: str, difficulty: int, seed: int,
         raise ValueError(
             f"Unknown template {template!r}; expected one of {TEMPLATES}"
         )
-    if template != "android":
+    if template == "evidence":
         raise NotImplementedError(
-            f"Template {template!r} is not implemented yet (Phase 3)"
+            f"Template {template!r} is not implemented yet (Phase 5)"
         )
     if difficulty not in DIFFICULTIES:
         raise ValueError(
@@ -53,8 +63,13 @@ def generate(template: str, difficulty: int, seed: int,
     scenario_dir.mkdir(parents=True, exist_ok=False)
 
     flag = generate_flag(flag_prefix)
-    zip_path = generate_android(difficulty, scenario_dir, flag)
-    store_solution(scenario_dir, flag, ANDROID_HINTS)
+    if template == "android":
+        zip_path = generate_android(difficulty, scenario_dir, flag)
+        hints = ANDROID_HINTS
+    else:
+        zip_path = generate_filesystem(difficulty, scenario_dir, flag)
+        hints = FILESYSTEM_HINTS
+    store_solution(scenario_dir, flag, hints)
     append_entry(scenario_id, template, difficulty, seed)
 
     result = {
