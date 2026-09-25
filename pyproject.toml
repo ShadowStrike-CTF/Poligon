@@ -15,6 +15,10 @@ authors = [
     {name = "Strategos", email = "r@strategos.au"}
 ]
 requires-python = ">=3.11"
+dependencies = [
+    "pillow",
+    "faker",
+]
 classifiers = [
     "Development Status :: 1 - Planning",
     "Programming Language :: Python :: 3",
@@ -23,8 +27,15 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [project.urls]
 "Source" = "https://github.com/ShadowStrike-CTF/poligon"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/poligon"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
