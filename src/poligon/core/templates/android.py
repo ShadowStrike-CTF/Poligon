@@ -1,5 +1,5 @@
 # Poligon — Template A: Android logical extraction.
-# © 2026 Strategos Pty Ltd. All rights reserved.
+# © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 #
 # All data is synthetic (Faker + hand-crafted). All randomness comes from the
