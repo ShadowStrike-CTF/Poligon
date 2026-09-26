@@ -4,7 +4,7 @@ by ShadowStrike. MIT.
 
 ## Dual delivery mode
 CLI: poligon generate android / poligon solve [id]
-Web: poligon --serve → localhost:7333 (generator form + challenge host in one UI)
+Web: python -m poligon / poligon-web → localhost:7333 (generator form + challenge host in one UI)
 
 Port 7333 ALWAYS (distinct from Sarissa 7331, Treska 7332).
 
@@ -12,7 +12,7 @@ Port 7333 ALWAYS (distinct from Sarissa 7331, Treska 7332).
 generate.py — generate(template, difficulty, seed, flag_prefix) — SEED APPLIED HERE FIRST
 templates/android.py — Template A (Pillow EXIF + Faker SQLite data)
 templates/filesystem.py — Template B
-templates/evidence.py — Template C (split flag, difficulty 3 only)
+templates/evidence.py — Template C (evidence package; flag split at difficulty 3 only)
 flag.py — flag generation + solution.json storage
 history.py — append-only training record (~/.poligon/history.json)
 
@@ -22,9 +22,20 @@ Include in generate() output path:
 # Manifest shape: {scenario_id, template, difficulty, generated_at}
 One function stub, one comment, no implementation.
 
-## CLI: poligon/cli.py (thin wrapper over core)
-## Web: poligon/web.py (FastAPI, generator form + challenge host)
-## Web frontend: poligon/static/index.html (two-panel: generator left, challenge right)
+## Template C — evidence (LOCKED)
+Common artifacts: case/acquisition_log.txt (examiner, tool, SHA-256 of each extract, notes),
+case/chain_of_custody.csv (item,date,released_by,received_by,purpose,notes),
+extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty (1/2/3).
+- D1: base64(flag) in extracts/device_01/notes.txt, label "evidence ref: "
+- D2: hex(flag) in ONE chain_of_custody.csv notes cell, among 3 hex decoy cells (single artifact)
+- D3: split_flag(flag) → "ref 1/2: " b64(half1) in acquisition_log.txt,
+      "ref 2/2: " b64(half2) in extracts/device_02/notes.txt (exactly TWO files);
+      misdirection: extracts/device_03/notes.txt carries "ref 2/2: " b64(fake credential)
+
+## CLI: src/poligon/cli.py (thin wrapper over core)
+## Web: src/poligon/web/main.py (FastAPI; PORT = 7333 single constant; create_app() + main() launcher)
+## Web frontend: src/poligon/web/static/index.html (two-panel: generator left, challenge right)
+## Launcher: src/poligon/__main__.py → poligon.web.main:main (devnull guard for windowed exe)
 
 ## Seed application rule (CRITICAL)
 random.seed(seed) must be the FIRST operation in core/generate.py.
