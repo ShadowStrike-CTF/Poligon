@@ -16,6 +16,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -51,6 +52,15 @@ def _download_url(scenario_id: str) -> str:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Poligon", docs_url=None, redoc_url=None)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://127.0.0.1:7331",
+            "http://localhost:7331",
+        ],
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
 
     @app.get("/")
     def index() -> FileResponse:
