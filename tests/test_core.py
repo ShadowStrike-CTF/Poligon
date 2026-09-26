@@ -169,9 +169,10 @@ def test_generate_invalid_difficulty(tmp_path):
         _generate(tmp_path, difficulty=0)
 
 
-def test_generate_evidence_not_implemented(tmp_path):
-    with pytest.raises(NotImplementedError):
-        _generate(tmp_path, template="evidence")
+def test_generate_evidence_supported(tmp_path):
+    result = _generate(tmp_path, template="evidence")
+    assert result["template"] == "evidence"
+    assert zipfile.is_zipfile(result["zip_path"])
 
 
 def test_random_seed_applied_first(tmp_path):

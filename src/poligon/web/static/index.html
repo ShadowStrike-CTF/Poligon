@@ -1,0 +1,208 @@
+<!doctype html>
+<!-- Poligon — web UI. © 2026 ShadowStrike. All rights reserved. Aut Viam Inveniam Aut Faciam -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poligon</title>
+<style>
+  :root {
+    --coral: #f1948a;
+    --coral-dim: #c9776f;
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --error: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+  }
+  header h1 { margin: 0; font-size: 20px; color: var(--coral); letter-spacing: .5px; }
+  header span { color: var(--muted); }
+  main {
+    display: grid; grid-template-columns: minmax(260px, 340px) 1fr;
+    gap: 16px; padding: 16px 24px; max-width: 1200px; margin: 0 auto;
+  }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 16px; min-width: 0;
+  }
+  h2 { margin: 0 0 12px; font-size: 15px; color: var(--coral); }
+  label { display: block; margin: 12px 0 4px; color: var(--muted); font-size: 12px;
+          text-transform: uppercase; letter-spacing: .5px; }
+  select, input {
+    width: 100%; padding: 8px 10px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px; font: inherit;
+  }
+  select:focus, input:focus { outline: 2px solid var(--coral); outline-offset: -1px; }
+  button {
+    margin-top: 16px; width: 100%; padding: 10px; border: 0; border-radius: 4px;
+    background: var(--coral); color: var(--bg); font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background: var(--coral-dim); }
+  button:disabled { opacity: .6; cursor: wait; }
+  .error {
+    display: none; margin-top: 12px; padding: 8px 10px; border-radius: 4px;
+    border: 1px solid var(--error); color: var(--error); background: rgba(248,81,73,.08);
+  }
+  .error.show { display: block; }
+  .muted { color: var(--muted); }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
+  a { color: var(--coral); }
+  .download { display: inline-block; margin-top: 12px; font-weight: 600; }
+  .stack { display: grid; gap: 16px; min-width: 0; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  td.id { font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Poligon</h1>
+  <span>CTF practice simulator · by ShadowStrike</span>
+</header>
+<main>
+  <section>
+    <h2>Generate challenge</h2>
+    <form id="gen-form">
+      <label for="template">Template</label>
+      <select id="template" name="template">
+        <option value="android">Android extraction</option>
+        <option value="filesystem">Filesystem</option>
+        <option value="evidence">Evidence package</option>
+      </select>
+      <label for="seed">Seed</label>
+      <input id="seed" name="seed" type="number" step="1" required>
+      <label for="difficulty">Difficulty</label>
+      <select id="difficulty" name="difficulty">
+        <option value="1">1 — Recruit</option>
+        <option value="2">2 — Operator</option>
+        <option value="3">3 — Veteran</option>
+      </select>
+      <button id="gen-btn" type="submit">Generate</button>
+      <div id="error" class="error" role="alert"></div>
+    </form>
+  </section>
+
+  <div class="stack">
+    <section>
+      <h2>Challenge</h2>
+      <div id="result"><p class="muted">Generate a challenge to see it here.</p></div>
+    </section>
+    <section>
+      <h2>Recent challenges</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Scenario</th><th>Template</th><th>Difficulty</th><th>Seed</th><th></th></tr></thead>
+          <tbody id="history"></tbody>
+        </table>
+      </div>
+      <p id="history-empty" class="muted">No challenges yet.</p>
+    </section>
+  </div>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  function el(tag, text, attrs) {
+    const node = document.createElement(tag);
+    if (text !== undefined) node.textContent = text;
+    Object.assign(node, attrs || {});
+    return node;
+  }
+
+  function showError(message) {
+    const box = $("error");
+    box.textContent = message;
+    box.classList.toggle("show", Boolean(message));
+  }
+
+  function renderResult(r) {
+    const dl = el("dl");
+    [["Scenario", r.scenario_id], ["Template", r.template],
+     ["Difficulty", r.difficulty], ["Seed", r.seed]].forEach(([k, v]) => {
+      dl.append(el("dt", k), el("dd", String(v)));
+    });
+    const link = el("a", "Download challenge.zip",
+                    { href: r.download_url, className: "download" });
+    link.setAttribute("download", "");
+    $("result").replaceChildren(dl, link);
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch("/api/history");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const rows = await res.json();
+      const body = $("history");
+      body.replaceChildren(...rows.map((e) => {
+        const tr = el("tr");
+        const link = el("a", "Download", { href: e.download_url });
+        link.setAttribute("download", "");
+        const cell = el("td");
+        cell.append(link);
+        tr.append(el("td", e.scenario_id.slice(0, 8), { className: "id", title: e.scenario_id }),
+                  el("td", e.template), el("td", String(e.difficulty)),
+                  el("td", String(e.seed)), cell);
+        return tr;
+      }));
+      $("history-empty").hidden = rows.length > 0;
+    } catch (err) {
+      showError("Could not load history: " + err.message);
+    }
+  }
+
+  $("gen-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    showError("");
+    const seed = $("seed").value.trim();
+    if (!/^-?\d+$/.test(seed)) {
+      showError("Seed must be a whole number.");
+      return;
+    }
+    const btn = $("gen-btn");
+    btn.disabled = true;
+    btn.textContent = "Generating…";
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          template: $("template").value,
+          seed: Number(seed),
+          difficulty: Number($("difficulty").value),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = typeof data.detail === "string" ? data.detail : "HTTP " + res.status;
+        throw new Error(detail);
+      }
+      renderResult(data);
+      loadHistory();
+    } catch (err) {
+      showError("Generation failed: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Generate";
+    }
+  });
+
+  $("seed").value = Math.floor(Math.random() * 100000);
+  loadHistory();
+</script>
+</body>
+</html>

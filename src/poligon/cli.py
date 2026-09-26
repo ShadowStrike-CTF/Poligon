@@ -14,7 +14,7 @@ from pathlib import Path
 
 from poligon.core.generate import generate  # NEVER from poligon.core import generate
 
-_TEMPLATES = {"android", "filesystem"}  # update when Template C added
+_TEMPLATES = {"android", "filesystem", "evidence"}
 
 
 class _Parser(argparse.ArgumentParser):
