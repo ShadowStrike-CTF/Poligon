@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "poligon"
-version = "0.0.1"
+version = "1.0.1"
 description = "CTF practice simulator for digital forensics training and competition prep. by ShadowStrike."
 readme = "README.md"
 license = {text = "Proprietary"}
