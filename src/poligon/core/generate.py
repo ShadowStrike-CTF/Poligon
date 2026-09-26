@@ -10,6 +10,7 @@ from pathlib import Path
 from poligon.core.flag import generate_flag, store_solution
 from poligon.core.history import append_entry
 from poligon.core.templates.android import generate_android
+from poligon.core.templates.evidence import generate_evidence
 from poligon.core.templates.filesystem import generate_filesystem
 
 TEMPLATES = ("android", "filesystem", "evidence")
@@ -31,6 +32,15 @@ FILESYSTEM_HINTS = [
     "base64.",
 ]
 
+EVIDENCE_HINTS = [
+    "Read the whole evidence package — logs and custody records are "
+    "evidence too.",
+    "Notes columns and free-text fields are good hiding places.",
+    "Not every encoding is base64 — hex is just as common.",
+    "A flag split in two needs both halves; a matching label does not make "
+    "a fragment genuine.",
+]
+
 
 def export_sarissa_manifest(result: dict) -> None:
     """Stub: export scenario manifest for Sarissa ingestion."""
@@ -48,10 +58,6 @@ def generate(template: str, difficulty: int, seed: int,
         raise ValueError(
             f"Unknown template {template!r}; expected one of {TEMPLATES}"
         )
-    if template == "evidence":
-        raise NotImplementedError(
-            f"Template {template!r} is not implemented yet (Phase 5)"
-        )
     if difficulty not in DIFFICULTIES:
         raise ValueError(
             f"Invalid difficulty {difficulty!r}; expected one of {DIFFICULTIES}"
@@ -66,9 +72,12 @@ def generate(template: str, difficulty: int, seed: int,
     if template == "android":
         zip_path = generate_android(difficulty, scenario_dir, flag)
         hints = ANDROID_HINTS
-    else:
+    elif template == "filesystem":
         zip_path = generate_filesystem(difficulty, scenario_dir, flag)
         hints = FILESYSTEM_HINTS
+    else:
+        zip_path = generate_evidence(difficulty, scenario_dir, flag)
+        hints = EVIDENCE_HINTS
     store_solution(scenario_dir, flag, hints)
     append_entry(scenario_id, template, difficulty, seed)
 

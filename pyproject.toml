@@ -18,6 +18,8 @@ requires-python = ">=3.11"
 dependencies = [
     "pillow",
     "faker",
+    "fastapi",
+    "uvicorn",
 ]
 classifiers = [
     "Development Status :: 1 - Planning",
@@ -29,9 +31,10 @@ classifiers = [
 
 [project.scripts]
 poligon = "poligon.cli:main"
+poligon-web = "poligon.web.main:main"
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "httpx"]
 
 [project.urls]
 "Source" = "https://github.com/ShadowStrike-CTF/poligon"
