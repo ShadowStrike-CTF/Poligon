@@ -57,6 +57,18 @@ Add to PyInstaller spec:
 hiddenimports=['PIL.JpegImagePlugin', 'PIL.PngImagePlugin', 'PIL._imaging']
 Verify at G.0: generate Template A in packaged exe, confirm EXIF injection works.
 
+## PACKAGING (PyInstaller)
+Spec: poligon.spec (onefile, console=False, pathex=['src'])
+Datas: src/poligon/web/static/index.html → poligon/web/static/
+Static dir: web/main.py static_dir() returns sys._MEIPASS/poligon/web/static when frozen.
+Devnull guard: __main__.py redirects sys.stdout/stderr to devnull when None.
+Build: pyinstaller poligon.spec
+Output: dist/poligon (Linux ELF)
+Hiddenimports: ['PIL.JpegImagePlugin', 'PIL.PngImagePlugin', 'PIL._imaging'] (mandated above).
+  No further entries needed — Faker locales collected by pyinstaller-hooks-contrib hook-faker.
+  warn-poligon.txt PIL misses (numpy, olefile, defusedxml) are optional deps, unused.
+Never use ProcessPoolExecutor — fork-bombs under PyInstaller.
+
 ## WHAT NOT TO DO
 - Never put the flag in the challenge zip
 - Never use real forensic or personal data in generators
