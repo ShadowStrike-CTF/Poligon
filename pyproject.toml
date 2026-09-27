@@ -12,7 +12,7 @@ description = "CTF practice simulator for digital forensics training and competi
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Strategos", email = "r@strategos.au"}
+  {name = "ShadowStrike"},
 ]
 requires-python = ">=3.11"
 dependencies = [
