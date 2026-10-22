@@ -17,8 +17,13 @@ from poligon.core.templates.browser import (
 )
 from poligon.core.templates.evidence import generate_evidence
 from poligon.core.templates.filesystem import generate_filesystem
+from poligon.core.templates.template_e import (
+    TemplateEConfig,
+    build_challenge as build_challenge_e,
+    generate_evtx,
+)
 
-TEMPLATES = ("android", "filesystem", "evidence", "browser")
+TEMPLATES = ("android", "filesystem", "evidence", "browser", "evtx")
 DIFFICULTIES = (1, 2, 3)
 DEFAULT_OUTPUT_DIR = Path.home() / ".poligon" / "scenarios"
 
@@ -53,6 +58,14 @@ BROWSER_HINTS = [
     "Downloads record where they came from: referrer, site_url, tab_url.",
     "visits.from_visit links each visit to the one that referred it — "
     "follow the chain.",
+]
+
+EVTX_HINTS = [
+    "events.json is a plain JSON array — jq or Python can filter it.",
+    "Group events by EventID and Channel; rare IDs deserve a closer look.",
+    "PowerShell 4104 events record the script block that actually ran.",
+    "Account creation (4720) and group membership (4732) leave usernames "
+    "behind.",
 ]
 
 
@@ -92,9 +105,12 @@ def generate(template: str, difficulty: int, seed: int,
     elif template == "evidence":
         zip_path = generate_evidence(difficulty, scenario_dir, flag)
         hints = EVIDENCE_HINTS
-    else:
+    elif template == "browser":
         zip_path = generate_browser(difficulty, scenario_dir, flag)
         hints = BROWSER_HINTS
+    else:
+        zip_path = generate_evtx(difficulty, scenario_dir, flag)
+        hints = EVTX_HINTS
     store_solution(scenario_dir, flag, hints)
     append_entry(scenario_id, template, difficulty, seed)
 
@@ -120,4 +136,13 @@ def generate_template_d(config: TemplateDConfig) -> bytes:
     random.seed(config.seed)
 
     _, data = build_challenge(config)
+    return data
+
+
+def generate_template_e(config: TemplateEConfig) -> bytes:
+    """Build a standalone Template E zip from config; return zip bytes.
+    Seeds the shared random stream here, per the seed application rule."""
+    random.seed(config.seed)
+
+    _, data = build_challenge_e(config)
     return data
