@@ -10,10 +10,15 @@ from pathlib import Path
 from poligon.core.flag import generate_flag, store_solution
 from poligon.core.history import append_entry
 from poligon.core.templates.android import generate_android
+from poligon.core.templates.browser import (
+    TemplateDConfig,
+    build_challenge,
+    generate_browser,
+)
 from poligon.core.templates.evidence import generate_evidence
 from poligon.core.templates.filesystem import generate_filesystem
 
-TEMPLATES = ("android", "filesystem", "evidence")
+TEMPLATES = ("android", "filesystem", "evidence", "browser")
 DIFFICULTIES = (1, 2, 3)
 DEFAULT_OUTPUT_DIR = Path.home() / ".poligon" / "scenarios"
 
@@ -39,6 +44,15 @@ EVIDENCE_HINTS = [
     "Not every encoding is base64 — hex is just as common.",
     "A flag split in two needs both halves; a matching label does not make "
     "a fragment genuine.",
+]
+
+BROWSER_HINTS = [
+    "Chrome's History file is a SQLite database — open it with a SQLite "
+    "client.",
+    "Chrome timestamps count microseconds from 1601-01-01, not 1970.",
+    "Downloads record where they came from: referrer, site_url, tab_url.",
+    "visits.from_visit links each visit to the one that referred it — "
+    "follow the chain.",
 ]
 
 
@@ -75,9 +89,12 @@ def generate(template: str, difficulty: int, seed: int,
     elif template == "filesystem":
         zip_path = generate_filesystem(difficulty, scenario_dir, flag)
         hints = FILESYSTEM_HINTS
-    else:
+    elif template == "evidence":
         zip_path = generate_evidence(difficulty, scenario_dir, flag)
         hints = EVIDENCE_HINTS
+    else:
+        zip_path = generate_browser(difficulty, scenario_dir, flag)
+        hints = BROWSER_HINTS
     store_solution(scenario_dir, flag, hints)
     append_entry(scenario_id, template, difficulty, seed)
 
@@ -95,3 +112,12 @@ def generate(template: str, difficulty: int, seed: int,
     # Manifest shape: {scenario_id, template, difficulty, generated_at}
     export_sarissa_manifest(result)
     return result
+
+
+def generate_template_d(config: TemplateDConfig) -> bytes:
+    """Build a standalone Template D zip from config; return zip bytes.
+    Seeds the shared random stream here, per the seed application rule."""
+    random.seed(config.seed)
+
+    _, data = build_challenge(config)
+    return data
