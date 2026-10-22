@@ -154,6 +154,29 @@ def test_template_d_flag_in_referrer(db):
     assert title == REFERRER_TITLE + FLAG
 
 
+def _flag_locations(zip_bytes):
+    """Every (table, column, id, value) in History whose value holds FLAG."""
+    con = sqlite3.connect(":memory:")
+    try:
+        con.deserialize(_member(zip_bytes, HISTORY_NAME))
+        hits = []
+        for table in ("urls", "visits", "downloads"):
+            for _, col, col_type, *_ in con.execute(
+                    f"PRAGMA table_info({table})"):
+                if col_type.upper() != "TEXT":
+                    continue
+                hits += [(table, col, row_id, value) for row_id, value in
+                         con.execute(f"SELECT id, {col} FROM {table} "
+                                     f"WHERE instr({col}, ?) > 0", (FLAG,))]
+        return sorted(hits)
+    finally:
+        con.close()
+
+
 def test_template_d_seed_reproducible():
+    # Seed guarantees logical identity (same flag, same location), not
+    # byte identity — SQLite serialisation can differ across versions.
     for mode in ("url_path", "download_filename", "referrer_chain"):
-        assert _zip(mode) == _zip(mode)
+        first = _flag_locations(_zip(mode))
+        assert first
+        assert first == _flag_locations(_zip(mode))
