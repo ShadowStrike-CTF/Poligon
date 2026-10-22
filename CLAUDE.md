@@ -14,6 +14,7 @@ templates/android.py — Template A (Pillow EXIF + Faker SQLite data)
 templates/filesystem.py — Template B
 templates/evidence.py — Template C (evidence package; flag split at difficulty 3 only)
 templates/browser.py — Template D (Chrome History SQLite)
+templates/template_e.py — Template E (JSON EVTX export)
 flag.py — flag generation + solution.json storage
 history.py — append-only training record (~/.poligon/history.json)
 
@@ -45,6 +46,19 @@ extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty
 - Standalone API: core/generate.py generate_template_d(TemplateDConfig) -> bytes
   (seeds there — templates/browser.py never seeds)
 - Tests: 45 → 58
+
+## Template E — evtx (v1.2.0)
+- JSON EVTX export (Chainsaw-compatible) — NOT binary .evtx (no reliable pure-Python writer)
+- Flag hidden in one EventData field; event_count noise events around it
+- Output: zip with challenge_<uuid>/events.json (indent=2) + challenge.txt
+- Supported flag event IDs: 4104 (ScriptBlockText), 4624 (TargetUserName),
+  4720 (SamAccountName), 4732 (MemberName), Sysmon 1 (CommandLine)
+- Difficulty: D1 → 4104, D2 → one of 4624/4720/4732, D3 → Sysmon 1; 80–120 events
+- TimeCreated is ISO 8601 (…Z); fixed 2025 window, never the wall clock
+- challenge.txt flag format uses _flag_prefix(flag) — never a hardcoded flag{...}
+- Standalone API: core/generate.py generate_template_e(TemplateEConfig) -> bytes
+  (seeds there — templates/template_e.py never seeds)
+- Tests: 58 → 70
 
 ## CLI: src/poligon/cli.py (thin wrapper over core)
 ## Web: src/poligon/web/main.py (FastAPI; PORT = 7333 single constant; create_app() + main() launcher)
