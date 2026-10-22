@@ -13,6 +13,7 @@ generate.py — generate(template, difficulty, seed, flag_prefix) — SEED APPLI
 templates/android.py — Template A (Pillow EXIF + Faker SQLite data)
 templates/filesystem.py — Template B
 templates/evidence.py — Template C (evidence package; flag split at difficulty 3 only)
+templates/browser.py — Template D (Chrome History SQLite)
 flag.py — flag generation + solution.json storage
 history.py — append-only training record (~/.poligon/history.json)
 
@@ -31,6 +32,19 @@ extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty
 - D3: split_flag(flag) → "ref 1/2: " b64(half1) in acquisition_log.txt,
       "ref 2/2: " b64(half2) in extracts/device_02/notes.txt (exactly TWO files);
       misdirection: extracts/device_03/notes.txt carries "ref 2/2: " b64(fake credential)
+
+## Template D — browser (v1.1.0)
+- Chrome History SQLite (urls, visits, downloads tables); template name "browser"
+- WebKit epoch: microseconds since 1601-01-01 (NEVER Unix epoch for Chrome timestamps)
+- Three flag modes: url_path (D1), download_filename (D2), referrer_chain (D3)
+- referrer_chain: flag in urls.title of the chain root, among 3 flag-shaped decoy titles;
+  only following visits.from_visit back from the danger_type=1 download resolves it
+- Output: zip containing challenge_<uuid>/History (no extension) + challenge.txt
+- In-memory SQLite via sqlite3.connect(":memory:") + serialize() — never write .db to disk
+- urls are unique (one row per URL, as in real Chrome); reserved TLDs only (.example/.test/.invalid)
+- Standalone API: core/generate.py generate_template_d(TemplateDConfig) -> bytes
+  (seeds there — templates/browser.py never seeds)
+- Tests: 45 → 58
 
 ## CLI: src/poligon/cli.py (thin wrapper over core)
 ## Web: src/poligon/web/main.py (FastAPI; PORT = 7333 single constant; create_app() + main() launcher)
