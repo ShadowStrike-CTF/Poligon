@@ -15,6 +15,7 @@ templates/filesystem.py — Template B
 templates/evidence.py — Template C (evidence package; flag split at difficulty 3 only)
 templates/browser.py — Template D (Chrome History SQLite)
 templates/template_e.py — Template E (JSON EVTX export)
+templates/template_f.py — Template F (iOS FFS extraction)
 flag.py — flag generation + solution.json storage
 history.py — append-only training record (~/.poligon/history.json)
 
@@ -59,6 +60,45 @@ extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty
 - Standalone API: core/generate.py generate_template_e(TemplateEConfig) -> bytes
   (seeds there — templates/template_e.py never seeds)
 - Tests: 58 → 70
+
+## Template F — ios (v1.3.0)
+- iOS Full File System (FFS) extraction, laid out like Magnet / Cellebrite / XRY
+  CTF images; template name "ios"
+- Zip layout (target DB per difficulty marked; every other DB is a decoy):
+  ios_extraction/
+    HomeDomain/Library/SMS/sms.db                                     ← D1
+    HomeDomain/Library/Safari/History.db                              ← decoy
+    HomeDomain/Library/Contacts/AddressBook.sqlitedb                  ← D3
+    AppDomain-com.apple.mobilecal/Library/Calendar/Calendar.sqlitedb  ← decoy
+    KnowledgeC/KnowledgeC.db                                          ← D2
+    LocationD/clients.plist                                           ← decoy stub (plistlib)
+    acquisition_log.txt                                               ← seeded metadata
+  challenge.txt
+- Difficulty → flag location (exactly one per challenge):
+  D1 → sms.db           message.text
+  D2 → KnowledgeC.db    ZOBJECT.ZSTRUCTUREDMETADATA (JSON blob)
+  D3 → AddressBook.sqlitedb  ABPerson.Note
+- Flag is base64(flag) in the target field — the raw flag never appears in any
+  zip member; the target DB is the only member carrying the encoded flag.
+  Decoy DBs hold realistic Faker noise only (no flag, no flag-shaped decoys)
+- challenge.txt flag format uses _flag_prefix(flag) — never a hardcoded flag{...}
+- Apple timestamps: Cocoa epoch, seconds since 2001-01-01 (sms.db message.date in
+  nanoseconds) — NEVER Unix epoch; fixed 2025 window, never the wall clock
+- acquisition_log.txt: device name, model, iOS version, UDID, extraction date,
+  SHA-256 of each artifact — all synthetic, all drawn from the seeded stream
+- Faker bound via fake.random = random.random.__self__ (as Template E);
+  no Random() instances
+- split_flag() NOT used — single-flag template; never redefine it
+- SQLite: stdlib sqlite3 only, in-memory via sqlite3.connect(":memory:") +
+  serialize() — never write .db to disk; Safari URLs use reserved TLDs only
+- ZIP_NAME = "challenge.zip" for the on-disk path from generate();
+  build_challenge() returns (poligon_template_f_<uuid>.zip, bytes) per D/E pattern
+- generate() dispatch: explicit `elif template == "ios":` at call time — no
+  dispatch dict; "ios" added to TEMPLATES, cli.py _TEMPLATES and the web dropdown
+- Standalone API: core/generate.py generate_template_f(TemplateFConfig) -> bytes
+  (seeds there — templates/template_f.py never seeds)
+- Seed test is logical (same flag, same DB/table/row) — never byte-identical
+- Tests: 70 → 77 (tests/test_template_f.py)
 
 ## CLI: src/poligon/cli.py (thin wrapper over core)
 ## Web: src/poligon/web/main.py (FastAPI; PORT = 7333 single constant; create_app() + main() launcher)
