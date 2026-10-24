@@ -64,20 +64,24 @@ extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty
 ## Template F — ios (v1.3.0)
 - iOS Full File System (FFS) extraction, laid out like Magnet / Cellebrite / XRY
   CTF images; template name "ios"
-- Zip layout (target DB per difficulty marked; every other DB is a decoy):
+- Zip layout — real iOS FFS paths throughout, NEVER iTunes-backup domain names
+  (HomeDomain/, AppDomain-*); target DB per difficulty marked, others are decoys:
   ios_extraction/
-    HomeDomain/Library/SMS/sms.db                                     ← D1
-    HomeDomain/Library/Safari/History.db                              ← decoy
-    HomeDomain/Library/Contacts/AddressBook.sqlitedb                  ← D3
-    AppDomain-com.apple.mobilecal/Library/Calendar/Calendar.sqlitedb  ← decoy
-    KnowledgeC/KnowledgeC.db                                          ← D2
-    LocationD/clients.plist                                           ← decoy stub (plistlib)
-    acquisition_log.txt                                               ← seeded metadata
+    private/var/mobile/Library/SMS/sms.db                        ← D1
+    private/var/mobile/Library/Safari/History.db                 ← decoy
+    private/var/mobile/Library/AddressBook/AddressBook.sqlitedb  ← D3
+    private/var/mobile/Library/Calendar/Calendar.sqlitedb        ← decoy
+    private/var/mobile/Library/CoreDuet/Knowledge/knowledgeC.db  ← D2
+    private/var/root/Library/Caches/locationd/clients.plist      ← decoy stub (plistlib)
+    acquisition_log.txt                                          ← seeded metadata
   challenge.txt
+  (clients.plist is under var/root on real devices — locationd runs as root)
 - Difficulty → flag location (exactly one per challenge):
-  D1 → sms.db           message.text
-  D2 → KnowledgeC.db    ZOBJECT.ZSTRUCTUREDMETADATA (JSON blob)
-  D3 → AddressBook.sqlitedb  ABPerson.Note
+  D1 → sms.db               message.text
+  D2 → knowledgeC.db        ZOBJECT.ZSTRUCTUREDMETADATA (integer FK) →
+                            ZSTRUCTUREDMETADATA row, __CONTENTDESCRIPTION column —
+                            real Core Data indirection, NEVER a JSON blob
+  D3 → AddressBook.sqlitedb ABPerson.Note
 - Flag is base64(flag) in the target field — the raw flag never appears in any
   zip member; the target DB is the only member carrying the encoded flag.
   Decoy DBs hold realistic Faker noise only (no flag, no flag-shaped decoys)
