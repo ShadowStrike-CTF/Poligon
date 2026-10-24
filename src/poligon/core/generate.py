@@ -22,8 +22,14 @@ from poligon.core.templates.template_e import (
     build_challenge as build_challenge_e,
     generate_evtx,
 )
+from poligon.core.templates.template_f import (
+    TemplateFConfig,
+    build_challenge as build_challenge_f,
+    generate_ios,
+)
 
-TEMPLATES = ("android", "filesystem", "evidence", "browser", "evtx")
+TEMPLATES = ("android", "filesystem", "evidence", "browser", "evtx",
+             "ios")
 DIFFICULTIES = (1, 2, 3)
 DEFAULT_OUTPUT_DIR = Path.home() / ".poligon" / "scenarios"
 
@@ -68,6 +74,17 @@ EVTX_HINTS = [
     "behind.",
 ]
 
+IOS_HINTS = [
+    "An FFS extraction keeps the device's real paths — start in "
+    "private/var/mobile/Library.",
+    "Apple timestamps count seconds from 2001-01-01, not 1970 "
+    "(sms.db uses nanoseconds).",
+    "knowledgeC.db is Core Data: ZOBJECT.ZSTRUCTUREDMETADATA is a key into "
+    "the ZSTRUCTUREDMETADATA table — join them.",
+    "Contacts live in AddressBook.sqlitedb; free-text Note fields are easy "
+    "to overlook.",
+]
+
 
 def export_sarissa_manifest(result: dict) -> None:
     """Stub: export scenario manifest for Sarissa ingestion."""
@@ -108,9 +125,12 @@ def generate(template: str, difficulty: int, seed: int,
     elif template == "browser":
         zip_path = generate_browser(difficulty, scenario_dir, flag)
         hints = BROWSER_HINTS
-    else:
+    elif template == "evtx":
         zip_path = generate_evtx(difficulty, scenario_dir, flag)
         hints = EVTX_HINTS
+    elif template == "ios":
+        zip_path = generate_ios(difficulty, scenario_dir, flag)
+        hints = IOS_HINTS
     store_solution(scenario_dir, flag, hints)
     append_entry(scenario_id, template, difficulty, seed)
 
@@ -145,4 +165,13 @@ def generate_template_e(config: TemplateEConfig) -> bytes:
     random.seed(config.seed)
 
     _, data = build_challenge_e(config)
+    return data
+
+
+def generate_template_f(config: TemplateFConfig) -> bytes:
+    """Build a standalone Template F zip from config; return zip bytes.
+    Seeds the shared random stream here, per the seed application rule."""
+    random.seed(config.seed)
+
+    _, data = build_challenge_f(config)
     return data
