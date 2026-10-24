@@ -14,7 +14,7 @@ from pathlib import Path
 
 from poligon.core.generate import generate  # NEVER from poligon.core import generate
 
-_TEMPLATES = {"android", "filesystem", "evidence", "browser", "evtx"}
+_TEMPLATES = {"android", "filesystem", "evidence", "browser", "evtx", "ios"}
 
 
 class _Parser(argparse.ArgumentParser):
