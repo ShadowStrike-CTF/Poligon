@@ -2,6 +2,7 @@
 # © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
+import base64
 import datetime
 import io
 import sqlite3
@@ -21,6 +22,12 @@ from poligon.core.templates.browser import (
 )
 
 FLAG = "FLAG{d3ad_b33f_cafe}"
+# INV-P1: History holds the flag encoded, never raw. Hex where base64's "/"
+# would break a URL path or filename; base64 in the referrer-chain title.
+FLAG_HEX = FLAG.encode().hex()
+FLAG_B64 = base64.b64encode(FLAG.encode()).decode()
+MODE_NEEDLE = {"url_path": FLAG_HEX, "download_filename": FLAG_HEX,
+               "referrer_chain": FLAG_B64}
 SEED = 1337
 
 
@@ -114,14 +121,14 @@ def test_template_d_webkit_timestamps(db):
 
 def test_template_d_flag_in_url_path(db):
     hits = db("url_path").execute(
-        "SELECT url FROM urls WHERE instr(url, ?) > 0", (FLAG,)).fetchall()
+        "SELECT url FROM urls WHERE instr(url, ?) > 0", (FLAG_HEX,)).fetchall()
     assert len(hits) == 1
 
 
 def test_template_d_flag_in_download(db):
     hits = db("download_filename").execute(
         "SELECT target_path FROM downloads WHERE instr(target_path, ?) > 0",
-        (FLAG,)).fetchall()
+        (FLAG_HEX,)).fetchall()
     assert len(hits) == 1
 
 
@@ -131,7 +138,7 @@ def test_template_d_flag_in_referrer(db):
         "SELECT title FROM urls WHERE title LIKE ?",
         (REFERRER_TITLE + "%",))]
     # strings alone sees the real flag among same-shaped decoys.
-    assert REFERRER_TITLE + FLAG in titles
+    assert REFERRER_TITLE + FLAG_B64 in titles
     assert len(titles) == REFERRER_DECOY_COUNT + 1
 
     # Only following the referrer chain back from the dangerous download
@@ -151,11 +158,11 @@ def test_template_d_flag_in_referrer(db):
     [title] = con.execute(
         "SELECT u.title FROM visits v JOIN urls u ON u.id = v.url "
         "WHERE v.id = ?", (visit_id,)).fetchone()
-    assert title == REFERRER_TITLE + FLAG
+    assert title == REFERRER_TITLE + FLAG_B64
 
 
-def _flag_locations(zip_bytes):
-    """Every (table, column, id, value) in History whose value holds FLAG."""
+def _flag_locations(zip_bytes, needle):
+    """Every (table, column, id, value) in History whose value holds needle."""
     con = sqlite3.connect(":memory:")
     try:
         con.deserialize(_member(zip_bytes, HISTORY_NAME))
@@ -167,7 +174,7 @@ def _flag_locations(zip_bytes):
                     continue
                 hits += [(table, col, row_id, value) for row_id, value in
                          con.execute(f"SELECT id, {col} FROM {table} "
-                                     f"WHERE instr({col}, ?) > 0", (FLAG,))]
+                                     f"WHERE instr({col}, ?) > 0", (needle,))]
         return sorted(hits)
     finally:
         con.close()
@@ -177,6 +184,6 @@ def test_template_d_seed_reproducible():
     # Seed guarantees logical identity (same flag, same location), not
     # byte identity — SQLite serialisation can differ across versions.
     for mode in ("url_path", "download_filename", "referrer_chain"):
-        first = _flag_locations(_zip(mode))
+        first = _flag_locations(_zip(mode), MODE_NEEDLE[mode])
         assert first
-        assert first == _flag_locations(_zip(mode))
+        assert first == _flag_locations(_zip(mode), MODE_NEEDLE[mode])

@@ -2,6 +2,7 @@
 # © 2026 ShadowStrike. All rights reserved.
 # Aut Viam Inveniam Aut Faciam
 
+import base64
 import datetime
 import io
 import json
@@ -15,6 +16,8 @@ from poligon.core.templates.template_e import (
 )
 
 FLAG = "FLAG{d3ad_b33f_cafe}"
+# INV-P1: events.json holds base64(flag), never the raw flag.
+FLAG_B64 = base64.b64encode(FLAG.encode()).decode()
 SEED = 1337
 
 
@@ -35,7 +38,7 @@ def _events(flag_event_id=4104, **kwargs):
 
 
 def _flag_events(events):
-    return [e for e in events if FLAG in json.dumps(e)]
+    return [e for e in events if FLAG_B64 in json.dumps(e)]
 
 
 def test_template_e_generates_zip():
@@ -75,14 +78,14 @@ def test_template_e_schema_keys():
 def test_template_e_flag_in_4104():
     hits = [e for e in _events(4104)
             if e["Event"]["System"]["EventID"] == 4104
-            and FLAG in e["Event"]["EventData"]["ScriptBlockText"]]
+            and FLAG_B64 in e["Event"]["EventData"]["ScriptBlockText"]]
     assert len(hits) == 1
 
 
 def test_template_e_flag_in_4624():
     hits = [e for e in _events(4624)
             if e["Event"]["System"]["EventID"] == 4624
-            and FLAG in e["Event"]["EventData"]["TargetUserName"]]
+            and FLAG_B64 in e["Event"]["EventData"]["TargetUserName"]]
     assert len(hits) == 1
 
 
@@ -96,7 +99,7 @@ def test_template_e_noise_events():
     [flag_event] = _flag_events(events)
     noise = [e for e in events if e is not flag_event]
     assert len(noise) == len(events) - 1
-    assert not any(FLAG in json.dumps(e) for e in noise)
+    assert not any(FLAG_B64 in json.dumps(e) for e in noise)
 
 
 def test_template_e_seed_reproducible():

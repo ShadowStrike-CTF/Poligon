@@ -64,6 +64,7 @@ BROWSER_HINTS = [
     "Downloads record where they came from: referrer, site_url, tab_url.",
     "visits.from_visit links each visit to the one that referred it — "
     "follow the chain.",
+    "Flags are rarely stored raw — hex and base64 are common disguises.",
 ]
 
 EVTX_HINTS = [
@@ -72,6 +73,7 @@ EVTX_HINTS = [
     "PowerShell 4104 events record the script block that actually ran.",
     "Account creation (4720) and group membership (4732) leave usernames "
     "behind.",
+    "Not every value is plain text — base64 is a common disguise.",
 ]
 
 IOS_HINTS = [

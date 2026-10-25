@@ -26,6 +26,8 @@ from typing import Optional
 from faker import Faker
 
 from poligon.core.flag import generate_flag
+from poligon.core.templates.android import encode_flag
+from poligon.core.templates.evidence import _hex
 
 ZIP_NAME = "challenge.zip"
 HISTORY_NAME = "History"            # no extension — exactly like real Chrome
@@ -43,10 +45,10 @@ WEBKIT_EPOCH = datetime.datetime(1601, 1, 1, tzinfo=datetime.timezone.utc)
 # in real Chrome databases.
 TRANSITION_LINK = 805306368
 
-# Referrer chain: the real flag sits in the title of the chain's root URL.
+# Referrer chain: base64(flag) sits in the title of the chain's root URL.
 # The chain ends at the one download Chrome flagged dangerous; decoy titles
-# with flag-shaped values sit off the chain, so strings alone cannot tell
-# them apart.
+# holding base64 of flag-shaped values sit off the chain, so strings alone
+# cannot tell them apart.
 CHAIN_LENGTH = 4
 REFERRER_DECOY_COUNT = 3
 REFERRER_TITLE = "C2 panel — "
@@ -161,7 +163,7 @@ def _plant_urls(fake: Faker, config: TemplateDConfig,
     if config.mode == "url_path":
         idx = random.randrange(len(urls))
         urls[idx] = {
-            "url": f"https://internal.corp.example/files/{config.flag}"
+            "url": f"https://internal.corp.example/files/{_hex(config.flag)}"
                    f"/report.pdf",
             "title": "Internal file share — report.pdf",
         }
@@ -174,13 +176,13 @@ def _plant_urls(fake: Faker, config: TemplateDConfig,
     chain, decoys = picked[:CHAIN_LENGTH], picked[CHAIN_LENGTH:]
     urls[chain[0]] = {
         "url": f"https://panel.{fake.domain_word()}.invalid/login",
-        "title": REFERRER_TITLE + config.flag,
+        "title": REFERRER_TITLE + encode_flag(config.flag),
     }
     prefix = _flag_prefix(config.flag)
     for idx in decoys:
         urls[idx] = {
             "url": f"https://panel.{fake.domain_word()}.invalid/login",
-            "title": REFERRER_TITLE + generate_flag(prefix),
+            "title": REFERRER_TITLE + encode_flag(generate_flag(prefix)),
         }
     return chain
 
@@ -248,7 +250,7 @@ def _build_downloads(fake: Faker, config: TemplateDConfig, user: str,
 
     if config.mode == "download_filename":
         idx = random.randrange(len(downloads))
-        downloads[idx] = _download_row(user, f"{config.flag}.pdf",
+        downloads[idx] = _download_row(user, f"{_hex(config.flag)}.pdf",
                                        urls, random.randrange(len(urls)))
     elif config.mode == "referrer_chain":
         idx = random.randrange(len(downloads))
