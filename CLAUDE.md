@@ -38,7 +38,8 @@ extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty
 ## Template D — browser (v1.1.0)
 - Chrome History SQLite (urls, visits, downloads tables); template name "browser"
 - WebKit epoch: microseconds since 1601-01-01 (NEVER Unix epoch for Chrome timestamps)
-- Three flag modes: url_path (D1), download_filename (D2), referrer_chain (D3)
+- Three flag modes: url_path (difficulty 1), download_filename (difficulty 2),
+  referrer_chain (difficulty 3)
 - referrer_chain: flag in urls.title of the chain root, among 3 flag-shaped decoy titles;
   only following visits.from_visit back from the danger_type=1 download resolves it
 - Output: zip containing challenge_<uuid>/History (no extension) + challenge.txt
@@ -154,20 +155,22 @@ Never use ProcessPoolExecutor — fork-bombs under PyInstaller.
 
 ## v1.3.1 — Templates D + E flag encoding + INV-P1
 - Bug: Template E (evtx) wrote the raw flag into one EventData field of events.json, and
-  Template D (browser) wrote the raw flag into its History SQLite (urls.url path at D1,
-  downloads filename at D2, urls.title of the chain root at D3). SQLite stores TEXT as
-  plain UTF-8, so `grep -a` over either zip returned the answer without any forensics.
+  Template D (browser) wrote the raw flag into its History SQLite (urls.url path at
+  difficulty 1, downloads filename at difficulty 2, urls.title of the chain root at
+  difficulty 3). SQLite stores TEXT as plain UTF-8, so `grep -a` over either zip
+  returned the answer without any forensics.
   Breaks "flag NEVER stored inside challenge zip". A/B/C/F already encode. D was found in
   the v1.3.1 recon and added to scope (R-approved)
 - INV-P1: a plaintext flag never appears in any shipped challenge artefact
 - Encoding (no new scheme): E and D use android.encode_flag() (base64 of the UTF-8 flag).
-  Where base64's "/" would break the artefact (D url_path path segment, D download
-  filename), the existing hex scheme (evidence._hex) is used instead
+  Where base64's "/" would break the artefact (Template D url_path path segment and
+  download filename), the existing hex scheme (evidence._hex) is used instead
   - E: encode_flag(flag) replaces {flag} in the same field, same surrounding text
-  - D1 url_path: /files/<hex(flag)>/report.pdf
-  - D2 download_filename: <hex(flag)>.pdf
-  - D3 referrer_chain: REFERRER_TITLE + encode_flag(flag); the 3 decoy titles are
-    encode_flag(generate_flag(prefix)), so strings alone still cannot tell them apart
+  - Template D difficulty 1, url_path: /files/<hex(flag)>/report.pdf
+  - Template D difficulty 2, download_filename: <hex(flag)>.pdf
+  - Template D difficulty 3, referrer_chain: REFERRER_TITLE + encode_flag(flag); the
+    3 decoy titles are encode_flag(generate_flag(prefix)), so strings alone still
+    cannot tell them apart
   - This supersedes the raw-flag placements in the Template D / E sections above
 - Test plan (tests/test_flag_absence.py), all six templates × difficulties 1–3 × several seeds,
   via generate():
@@ -180,6 +183,7 @@ Never use ProcessPoolExecutor — fork-bombs under PyInstaller.
     gives back the solution.json flag (hiding it beyond recovery is a different bug)
   - Existing D/E tests search for the encoded value instead of the raw flag; nothing they
     check is loosened
+- Tests: 77 → 107 (tests/test_flag_absence.py: 18 + 6 INV-P1, 6 solvable)
 - Release: version 1.3.1, classifier "Development Status :: 3 - Alpha"
   (1.3.0 keeps "1 - Planning" on PyPI; release metadata cannot be edited)
 - What NOT to do:

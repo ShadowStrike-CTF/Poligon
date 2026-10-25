@@ -27,6 +27,8 @@ from typing import Optional
 
 from faker import Faker
 
+from poligon.core.templates.android import encode_flag
+
 ZIP_NAME = "challenge.zip"
 EVENTS_NAME = "events.json"
 CHALLENGE_TXT = "challenge.txt"
@@ -183,8 +185,10 @@ def _event_data(fake: Faker, event_id: int, user: str,
 
 
 def _plant_flag(fake: Faker, data: dict, event_id: int, flag: str) -> None:
-    """Overwrite the event's flag field with a value holding the flag."""
+    """Overwrite the event's flag field with a value holding base64(flag) —
+    never the raw flag (INV-P1)."""
     field = HIGH_VALUE_IDS[event_id][1]
+    flag = encode_flag(flag)
     if event_id == 4104:
         data[field] = (f"$key = '{flag}'\n"
                        f"IEX (New-Object Net.WebClient).DownloadString("
