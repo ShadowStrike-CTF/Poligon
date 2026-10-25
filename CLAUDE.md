@@ -29,11 +29,11 @@ One function stub, one comment, no implementation.
 Common artifacts: case/acquisition_log.txt (examiner, tool, SHA-256 of each extract, notes),
 case/chain_of_custody.csv (item,date,released_by,received_by,purpose,notes),
 extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty (1/2/3).
-- D1: base64(flag) in extracts/device_01/notes.txt, label "evidence ref: "
-- D2: hex(flag) in ONE chain_of_custody.csv notes cell, among 3 hex decoy cells (single artifact)
-- D3: split_flag(flag) → "ref 1/2: " b64(half1) in acquisition_log.txt,
-      "ref 2/2: " b64(half2) in extracts/device_02/notes.txt (exactly TWO files);
-      misdirection: extracts/device_03/notes.txt carries "ref 2/2: " b64(fake credential)
+- difficulty 1: base64(flag) in extracts/device_01/notes.txt, label "evidence ref: "
+- difficulty 2: hex(flag) in ONE chain_of_custody.csv notes cell, among 3 hex decoy cells (single artifact)
+- difficulty 3: split_flag(flag) → "ref 1/2: " b64(half1) in acquisition_log.txt,
+                "ref 2/2: " b64(half2) in extracts/device_02/notes.txt (exactly TWO files);
+                misdirection: extracts/device_03/notes.txt carries "ref 2/2: " b64(fake credential)
 
 ## Template D — browser (v1.1.0)
 - Chrome History SQLite (urls, visits, downloads tables); template name "browser"
@@ -55,7 +55,8 @@ extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty
 - Output: zip with challenge_<uuid>/events.json (indent=2) + challenge.txt
 - Supported flag event IDs: 4104 (ScriptBlockText), 4624 (TargetUserName),
   4720 (SamAccountName), 4732 (MemberName), Sysmon 1 (CommandLine)
-- Difficulty: D1 → 4104, D2 → one of 4624/4720/4732, D3 → Sysmon 1; 80–120 events
+- Difficulty: difficulty 1 → 4104, difficulty 2 → one of 4624/4720/4732,
+  difficulty 3 → Sysmon 1; 80–120 events
 - TimeCreated is ISO 8601 (…Z); fixed 2025 window, never the wall clock
 - challenge.txt flag format uses _flag_prefix(flag) — never a hardcoded flag{...}
 - Standalone API: core/generate.py generate_template_e(TemplateEConfig) -> bytes
@@ -68,21 +69,21 @@ extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty
 - Zip layout — real iOS FFS paths throughout, NEVER iTunes-backup domain names
   (HomeDomain/, AppDomain-*); target DB per difficulty marked, others are decoys:
   ios_extraction/
-    private/var/mobile/Library/SMS/sms.db                        ← D1
+    private/var/mobile/Library/SMS/sms.db                        ← difficulty 1
     private/var/mobile/Library/Safari/History.db                 ← decoy
-    private/var/mobile/Library/AddressBook/AddressBook.sqlitedb  ← D3
+    private/var/mobile/Library/AddressBook/AddressBook.sqlitedb  ← difficulty 3
     private/var/mobile/Library/Calendar/Calendar.sqlitedb        ← decoy
-    private/var/mobile/Library/CoreDuet/Knowledge/knowledgeC.db  ← D2
+    private/var/mobile/Library/CoreDuet/Knowledge/knowledgeC.db  ← difficulty 2
     private/var/root/Library/Caches/locationd/clients.plist      ← decoy stub (plistlib)
     acquisition_log.txt                                          ← seeded metadata
   challenge.txt
   (clients.plist is under var/root on real devices — locationd runs as root)
 - Difficulty → flag location (exactly one per challenge):
-  D1 → sms.db               message.text
-  D2 → knowledgeC.db        ZOBJECT.ZSTRUCTUREDMETADATA (integer FK) →
-                            ZSTRUCTUREDMETADATA row, __CONTENTDESCRIPTION column —
-                            real Core Data indirection, NEVER a JSON blob
-  D3 → AddressBook.sqlitedb ABPerson.Note
+  difficulty 1 → sms.db               message.text
+  difficulty 2 → knowledgeC.db        ZOBJECT.ZSTRUCTUREDMETADATA (integer FK) →
+                                      ZSTRUCTUREDMETADATA row, __CONTENTDESCRIPTION column —
+                                      real Core Data indirection, NEVER a JSON blob
+  difficulty 3 → AddressBook.sqlitedb ABPerson.Note
 - Flag is base64(flag) in the target field — the raw flag never appears in any
   zip member; the target DB is the only member carrying the encoded flag.
   Decoy DBs hold realistic Faker noise only (no flag, no flag-shaped decoys)
