@@ -11,6 +11,8 @@ import poligon.core.generate as gen_mod
 from poligon.core import history
 from poligon.core.flag import load_solution
 from poligon.core.generate import TEMPLATES
+from poligon.core.templates.android import encode_flag
+from poligon.core.templates.evidence import _hex
 from poligon.web.main import create_app
 
 PATH_KEYS = ("scenario_dir", "zip_path")
@@ -30,11 +32,15 @@ def client(tmp_path, monkeypatch):
 
 
 def _needles(flag: str) -> list[bytes]:
-    """INV-P1 set: full flag and inner value, lowercased, UTF-8 and UTF-16LE."""
+    """INV-P1 set (full flag and inner value, lowercased, UTF-8 and UTF-16LE)
+    plus the encoded forms. In the zip an encoded flag is intended; in an API
+    response any form of the flag is a leak."""
     inner = flag[flag.index("{") + 1:flag.rindex("}")]
     out = []
     for text in (flag.lower(), inner.lower()):
         out += [text.encode("utf-8"), text.encode("utf-16-le")]
+    for text in (encode_flag(flag), _hex(flag)):
+        out.append(text.lower().encode("utf-8"))
     return out
 
 
