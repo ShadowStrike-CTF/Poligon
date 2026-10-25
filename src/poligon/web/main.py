@@ -16,7 +16,6 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -27,6 +26,9 @@ from poligon.core.history import load_history
 PORT = 7333
 HOST = "127.0.0.1"
 HISTORY_LIMIT = 20
+# Server filesystem paths — never sent to a client (INV-P3: scenario_dir is the
+# folder holding solution.json). seed stays: see CLAUDE.md v1.3.2 threat model.
+_PRIVATE_KEYS = ("scenario_dir", "zip_path")
 
 # generate() seeds the one module-level random stream; serialise calls so
 # concurrent requests cannot interleave draws and break reproducibility.
@@ -51,16 +53,9 @@ def _download_url(scenario_id: str) -> str:
 
 
 def create_app() -> FastAPI:
+    # No CORS: Sarissa proxies server-to-server and its browser never calls
+    # Poligon directly (INV-P3).
     app = FastAPI(title="Poligon", docs_url=None, redoc_url=None)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
-            "http://127.0.0.1:7331",
-            "http://localhost:7331",
-        ],
-        allow_methods=["GET", "POST"],
-        allow_headers=["*"],
-    )
 
     @app.get("/")
     def index() -> FileResponse:
@@ -78,7 +73,8 @@ def create_app() -> FastAPI:
                 result = generate(req.template, req.difficulty, req.seed)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return {**result, "download_url": _download_url(result["scenario_id"])}
+        public = {k: v for k, v in result.items() if k not in _PRIVATE_KEYS}
+        return {**public, "download_url": _download_url(result["scenario_id"])}
 
     @app.get("/api/download/{scenario_id}")
     def download(scenario_id: str) -> FileResponse:

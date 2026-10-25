@@ -18,6 +18,8 @@ from poligon.core.templates.template_e import (
 FLAG = "FLAG{d3ad_b33f_cafe}"
 # INV-P1: events.json holds base64(flag), never the raw flag.
 FLAG_B64 = base64.b64encode(FLAG.encode()).decode()
+# 4732 MemberName is an AD DN, so it carries hex(flag) instead (v1.3.2).
+FLAG_HEX = FLAG.encode().hex()
 SEED = 1337
 
 
@@ -38,7 +40,8 @@ def _events(flag_event_id=4104, **kwargs):
 
 
 def _flag_events(events):
-    return [e for e in events if FLAG_B64 in json.dumps(e)]
+    return [e for e in events
+            if FLAG_B64 in json.dumps(e) or FLAG_HEX in json.dumps(e)]
 
 
 def test_template_e_generates_zip():
@@ -87,6 +90,14 @@ def test_template_e_flag_in_4624():
             if e["Event"]["System"]["EventID"] == 4624
             and FLAG_B64 in e["Event"]["EventData"]["TargetUserName"]]
     assert len(hits) == 1
+
+
+def test_template_e_4732_hex():
+    hits = [e["Event"]["EventData"]["MemberName"] for e in _events(4732)
+            if e["Event"]["System"]["EventID"] == 4732
+            and FLAG_HEX in e["Event"]["EventData"]["MemberName"]]
+    assert hits == [f"CN={FLAG_HEX},CN=Users,DC=corp,DC=example"]
+    assert not any(FLAG_B64 in json.dumps(e) for e in _events(4732))
 
 
 def test_template_e_flag_unique():
