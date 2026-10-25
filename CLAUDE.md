@@ -29,11 +29,11 @@ One function stub, one comment, no implementation.
 Common artifacts: case/acquisition_log.txt (examiner, tool, SHA-256 of each extract, notes),
 case/chain_of_custody.csv (item,date,released_by,received_by,purpose,notes),
 extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty (1/2/3).
-- D1: base64(flag) in extracts/device_01/notes.txt, label "evidence ref: "
-- D2: hex(flag) in ONE chain_of_custody.csv notes cell, among 3 hex decoy cells (single artifact)
-- D3: split_flag(flag) → "ref 1/2: " b64(half1) in acquisition_log.txt,
-      "ref 2/2: " b64(half2) in extracts/device_02/notes.txt (exactly TWO files);
-      misdirection: extracts/device_03/notes.txt carries "ref 2/2: " b64(fake credential)
+- difficulty 1: base64(flag) in extracts/device_01/notes.txt, label "evidence ref: "
+- difficulty 2: hex(flag) in ONE chain_of_custody.csv notes cell, among 3 hex decoy cells (single artifact)
+- difficulty 3: split_flag(flag) → "ref 1/2: " b64(half1) in acquisition_log.txt,
+                "ref 2/2: " b64(half2) in extracts/device_02/notes.txt (exactly TWO files);
+                misdirection: extracts/device_03/notes.txt carries "ref 2/2: " b64(fake credential)
 
 ## Template D — browser (v1.1.0)
 - Chrome History SQLite (urls, visits, downloads tables); template name "browser"
@@ -55,7 +55,8 @@ extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty
 - Output: zip with challenge_<uuid>/events.json (indent=2) + challenge.txt
 - Supported flag event IDs: 4104 (ScriptBlockText), 4624 (TargetUserName),
   4720 (SamAccountName), 4732 (MemberName), Sysmon 1 (CommandLine)
-- Difficulty: D1 → 4104, D2 → one of 4624/4720/4732, D3 → Sysmon 1; 80–120 events
+- Difficulty: difficulty 1 → 4104, difficulty 2 → one of 4624/4720/4732,
+  difficulty 3 → Sysmon 1; 80–120 events
 - TimeCreated is ISO 8601 (…Z); fixed 2025 window, never the wall clock
 - challenge.txt flag format uses _flag_prefix(flag) — never a hardcoded flag{...}
 - Standalone API: core/generate.py generate_template_e(TemplateEConfig) -> bytes
@@ -68,21 +69,21 @@ extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty
 - Zip layout — real iOS FFS paths throughout, NEVER iTunes-backup domain names
   (HomeDomain/, AppDomain-*); target DB per difficulty marked, others are decoys:
   ios_extraction/
-    private/var/mobile/Library/SMS/sms.db                        ← D1
+    private/var/mobile/Library/SMS/sms.db                        ← difficulty 1
     private/var/mobile/Library/Safari/History.db                 ← decoy
-    private/var/mobile/Library/AddressBook/AddressBook.sqlitedb  ← D3
+    private/var/mobile/Library/AddressBook/AddressBook.sqlitedb  ← difficulty 3
     private/var/mobile/Library/Calendar/Calendar.sqlitedb        ← decoy
-    private/var/mobile/Library/CoreDuet/Knowledge/knowledgeC.db  ← D2
+    private/var/mobile/Library/CoreDuet/Knowledge/knowledgeC.db  ← difficulty 2
     private/var/root/Library/Caches/locationd/clients.plist      ← decoy stub (plistlib)
     acquisition_log.txt                                          ← seeded metadata
   challenge.txt
   (clients.plist is under var/root on real devices — locationd runs as root)
 - Difficulty → flag location (exactly one per challenge):
-  D1 → sms.db               message.text
-  D2 → knowledgeC.db        ZOBJECT.ZSTRUCTUREDMETADATA (integer FK) →
-                            ZSTRUCTUREDMETADATA row, __CONTENTDESCRIPTION column —
-                            real Core Data indirection, NEVER a JSON blob
-  D3 → AddressBook.sqlitedb ABPerson.Note
+  difficulty 1 → sms.db               message.text
+  difficulty 2 → knowledgeC.db        ZOBJECT.ZSTRUCTUREDMETADATA (integer FK) →
+                                      ZSTRUCTUREDMETADATA row, __CONTENTDESCRIPTION column —
+                                      real Core Data indirection, NEVER a JSON blob
+  difficulty 3 → AddressBook.sqlitedb ABPerson.Note
 - Flag is base64(flag) in the target field — the raw flag never appears in any
   zip member; the target DB is the only member carrying the encoded flag.
   Decoy DBs hold realistic Faker noise only (no flag, no flag-shaped decoys)
@@ -191,3 +192,64 @@ Never use ProcessPoolExecutor — fork-bombs under PyInstaller.
   - Never weaken INV-P1 (skip, xfail, narrow needles/haystacks) to make a template pass
   - Never put the flag, or its inner value, in plaintext in any shipped artefact
   - Never push a tag (R tags v1.3.1 locally after merge)
+
+## v1.3.2 — follow-ups + INV-P3
+- INV-P3: the answer key never leaves the setter side. No API response that a
+  solver-side client could consume (the Sarissa Generate path) carries the flag, its
+  inner value, solution.json content, or the server-side path to solution.json
+- S1 — Template E 4732 realism: a real AD distinguished name escapes base64's "+" and
+  "=", so MemberName = CN=<base64>,… looked planted. 4732 MemberName now uses the
+  existing hex scheme: CN=<evidence._hex(flag)>,CN=Users,DC=corp,DC=example.
+  That field only; 4104 / 4624 / 4720 / Sysmon 1 keep encode_flag(). No new scheme
+  (supersedes the v1.3.1 "E: encode_flag(flag)" line for 4732 only)
+- S2 — CLAUDE.md difficulty labels "D1/D2/D3" (Templates C, E, F) renamed to
+  "difficulty 1/2/3", so they never clash with brief decision IDs
+- S3 — version 1.3.1 → 1.3.2
+- S4 — INV-P3 fix (narrow; R + Pumpkin decision):
+  - /api/generate drops scenario_dir and zip_path from its response (server
+    filesystem paths; scenario_dir is the folder holding solution.json).
+    /api/history never returned them and must not start. generate() itself still
+    returns both — cli.py copies result["zip_path"]; only the web layer strips them
+  - CORS allowance for Sarissa's origin (127.0.0.1:7331 / localhost:7331) removed.
+    Sarissa's browser never calls Poligon directly (recon @ Sarissa 1fba0b6): its
+    server proxies on loopback, reads only scenario_id, forwards only the zip bytes
+  - seed STAYS in /api/generate, /api/history, history.json and the web UI —
+    setter-side, needed for reproducibility (see threat model)
+- Threat model (why seed stays):
+  - Solo mode (today): setter = solver on one machine. solution.json is on the
+    local disk anyway, so seed visibility is acceptable — anyone holding the seed
+    can rerun the public generator (pip install poligon) and get the same flag,
+    and in solo mode that person is the setter
+  - Multi-user practice mode (future): seed is drawn server-side and held setter-side,
+    never chosen or shown to the solver; a per-deployment salt mixed into the seed
+    is possible, so a public install cannot replay it. Deferred to Megdan
+    architecture build step 8 — not v1.3.2. Until then, Sarissa's solver-chosen seed
+    is a known, accepted solo-mode property
+- Test plan:
+  - tests/test_flag_exposure.py (new), via the FastAPI app (create_app) and a
+    temporary HOME / output dir:
+    - test_inv_p3_generate_response: all six templates; POST /api/generate; the raw
+      response body holds no INV-P1 needle (full flag + inner value, lowercased,
+      UTF-8 and UTF-16LE, case-insensitive), compared against that scenario's
+      solution.json; no scenario_dir / zip_path key. seed is explicitly allowed,
+      with a comment pointing at the threat model above
+    - test_inv_p3_history_response: same check on GET /api/history after generating
+    - test_inv_p3_no_sarissa_cors: a request with Origin http://127.0.0.1:7331 gets
+      no Access-Control-Allow-Origin header
+    - Written first and shown failing before the fix
+  - tests/test_template_e.py: 4732 tests search for the hex value; new
+    test_template_e_4732_hex asserts MemberName holds hex(flag) and not base64(flag).
+    Nothing checked is loosened
+  - INV-P1 (tests/test_flag_absence.py) stays green for all six templates
+- Tests: 107 → 116 (test_flag_exposure.py: 6 generate + 1 history + 1 CORS;
+  test_template_e.py: +1)
+- What NOT to do:
+  - Never return scenario_dir, zip_path, the flag, its inner value or solution.json
+    content from any web route
+  - Never remove zip_path from generate()'s return value (cli.py depends on it)
+  - Never strip seed from responses/UI/history in v1.3.2 — that is the multi-user
+    mode decision (step 8), not this release
+  - Never re-add a CORS allowance for Sarissa — it proxies server-to-server
+  - Never invent a new encoding scheme (hex for 4732 is evidence._hex)
+  - Never weaken INV-P1 or INV-P3 (skip, xfail, narrow needles) to get green
+  - Never push a tag
