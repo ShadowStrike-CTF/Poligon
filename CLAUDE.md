@@ -151,3 +151,39 @@ Never use ProcessPoolExecutor — fork-bombs under PyInstaller.
 - Never use port other than 7333 for web mode
 - Never package without Pillow hiddenimports
 - Never use git add -A — always path-scoped adds
+
+## v1.3.1 — Templates D + E flag encoding + INV-P1
+- Bug: Template E (evtx) wrote the raw flag into one EventData field of events.json, and
+  Template D (browser) wrote the raw flag into its History SQLite (urls.url path at D1,
+  downloads filename at D2, urls.title of the chain root at D3). SQLite stores TEXT as
+  plain UTF-8, so `grep -a` over either zip returned the answer without any forensics.
+  Breaks "flag NEVER stored inside challenge zip". A/B/C/F already encode. D was found in
+  the v1.3.1 recon and added to scope (R-approved)
+- INV-P1: a plaintext flag never appears in any shipped challenge artefact
+- Encoding (no new scheme): E and D use android.encode_flag() (base64 of the UTF-8 flag).
+  Where base64's "/" would break the artefact (D url_path path segment, D download
+  filename), the existing hex scheme (evidence._hex) is used instead
+  - E: encode_flag(flag) replaces {flag} in the same field, same surrounding text
+  - D1 url_path: /files/<hex(flag)>/report.pdf
+  - D2 download_filename: <hex(flag)>.pdf
+  - D3 referrer_chain: REFERRER_TITLE + encode_flag(flag); the 3 decoy titles are
+    encode_flag(generate_flag(prefix)), so strings alone still cannot tell them apart
+  - This supersedes the raw-flag placements in the Template D / E sections above
+- Test plan (tests/test_flag_absence.py), all six templates × difficulties 1–3 × several seeds,
+  via generate():
+  - test_inv_p1_no_plaintext_flag: needles = full flag and the inner value (between { and }),
+    lowercased, as UTF-8 and UTF-16LE bytes; haystacks = every member's raw bytes and its
+    UTF-8 decode where possible, the zip comment, every member name/path; case-insensitive;
+    members whose magic is zip (PK\x03\x04) or gzip (\x1f\x8b) are opened and scanned too
+  - test_inv_p1_solution_outside_zip: solution.json sits beside the zip, never in it
+  - test_template_d_solvable / test_template_e_solvable: decoding the planted value
+    gives back the solution.json flag (hiding it beyond recovery is a different bug)
+  - Existing D/E tests search for the encoded value instead of the raw flag; nothing they
+    check is loosened
+- Release: version 1.3.1, classifier "Development Status :: 3 - Alpha"
+  (1.3.0 keeps "1 - Planning" on PyPI; release metadata cannot be edited)
+- What NOT to do:
+  - Never invent a new encoding scheme (base64 / hex only, the existing helpers)
+  - Never weaken INV-P1 (skip, xfail, narrow needles/haystacks) to make a template pass
+  - Never put the flag, or its inner value, in plaintext in any shipped artefact
+  - Never push a tag (R tags v1.3.1 locally after merge)
