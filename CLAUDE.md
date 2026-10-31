@@ -45,6 +45,7 @@ extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty
 - Output: zip containing challenge_<uuid>/History (no extension) + challenge.txt
 - In-memory SQLite via sqlite3.connect(":memory:") + serialize() — never write .db to disk
 - urls are unique (one row per URL, as in real Chrome); reserved TLDs only (.example/.test/.invalid)
+- downloads referrer pool must exclude the flag URL (hex form)
 - Standalone API: core/generate.py generate_template_d(TemplateDConfig) -> bytes
   (seeds there — templates/browser.py never seeds)
 - Tests: 45 → 58
