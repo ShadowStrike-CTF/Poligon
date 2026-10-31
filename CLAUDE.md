@@ -232,7 +232,9 @@ Never use ProcessPoolExecutor — fork-bombs under PyInstaller.
       response body holds no INV-P1 needle (full flag + inner value, lowercased,
       UTF-8 and UTF-16LE, case-insensitive), compared against that scenario's
       solution.json; no scenario_dir / zip_path key. seed is explicitly allowed,
-      with a comment pointing at the threat model above
+      with a comment pointing at the threat model above. Needles also include the
+      encoded forms encode_flag(flag) and _hex(flag), lowercased, UTF-8 — in an API
+      response any form of the flag is a leak (in the zip, encoded is intended)
     - test_inv_p3_history_response: same check on GET /api/history after generating
     - test_inv_p3_no_sarissa_cors: a request with Origin http://127.0.0.1:7331 gets
       no Access-Control-Allow-Origin header
