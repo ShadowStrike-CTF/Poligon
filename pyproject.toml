@@ -34,7 +34,7 @@ poligon = "poligon.cli:main"
 poligon-web = "poligon.web.main:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "httpx"]
+dev = ["pytest", "httpx", "hypothesis"]
 
 [project.urls]
 "Source" = "https://github.com/ShadowStrike-CTF/poligon"
@@ -45,3 +45,4 @@ packages = ["src/poligon"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = ["slow: property-based fuzzing (hypothesis)"]
