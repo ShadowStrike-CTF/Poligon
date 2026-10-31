@@ -241,17 +241,22 @@ def _download_row(user: str, filename: str,
 
 def _build_downloads(fake: Faker, config: TemplateDConfig, user: str,
                      urls: list[dict], chain: list[int]) -> list[dict]:
+    # The url_path flag URL is never a download referrer — otherwise its
+    # hex flag would also land in downloads.referrer / tab_url, a second
+    # flag location.
+    flag_hex = _hex(config.flag)
+    referrers = [i for i, u in enumerate(urls) if flag_hex not in u["url"]]
     downloads = []
     for _ in range(config.download_count):
         ext = random.choice(sorted(_MIME_TYPES))
         filename = fake.file_name(extension=ext)
         downloads.append(_download_row(user, filename, urls,
-                                       random.randrange(len(urls))))
+                                       random.choice(referrers)))
 
     if config.mode == "download_filename":
         idx = random.randrange(len(downloads))
-        downloads[idx] = _download_row(user, f"{_hex(config.flag)}.pdf",
-                                       urls, random.randrange(len(urls)))
+        downloads[idx] = _download_row(user, f"{flag_hex}.pdf",
+                                       urls, random.choice(referrers))
     elif config.mode == "referrer_chain":
         idx = random.randrange(len(downloads))
         dropper = _download_row(user,
