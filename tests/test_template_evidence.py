@@ -4,8 +4,12 @@
 
 import base64
 import binascii
+import calendar
 import csv
+import hashlib
 import io
+import re
+import time
 import zipfile
 from pathlib import Path
 
@@ -23,6 +27,9 @@ from poligon.core.templates.evidence import (
     D3_DECOY_FILE,
     D3_LABELS,
     D3_PART_FILES,
+    _TS_END,
+    _TS_START,
+    _iso,
 )
 from poligon.core.templates.filesystem import split_flag
 
@@ -172,3 +179,55 @@ def test_evidence_history_recorded(tmp_path, isolated_history):
     assert latest["template"] == "evidence"
     assert latest["difficulty"] == 3
     assert latest["seed"] == 5
+
+
+# --- mutation sweep ---------------------------------------------------------
+
+ISO_STAMP = re.compile(rb"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
+# Timestamps start inside 2025 and only ever move forward by hours or days.
+LATEST = _TS_END + 30 * 86400
+
+
+def test_evidence_iso_format():
+    assert _iso(_TS_START) == "2025-01-01T00:00:00Z"
+
+
+def test_evidence_timestamps_fixed_window(tmp_path):
+    # Fixed 2025 window, never the wall clock: every ISO timestamp in the
+    # logs and CSVs, and every zip member time.
+    for difficulty in (1, 2, 3):
+        result = _generate(tmp_path, difficulty=difficulty, seed=difficulty)
+        stamps = [calendar.timegm(time.strptime(m.decode(),
+                                                "%Y-%m-%dT%H:%M:%SZ"))
+                  for data in _contents(result["zip_path"]).values()
+                  for m in ISO_STAMP.findall(data)]
+        assert stamps
+        assert all(_TS_START <= t <= LATEST for t in stamps)
+        with zipfile.ZipFile(result["zip_path"]) as zf:
+            assert {i.date_time[0] for i in zf.infolist()} == {2025}
+
+
+def test_evidence_device_count_matches_difficulty(tmp_path):
+    for difficulty in (1, 2, 3):
+        names = _contents(_generate(tmp_path, difficulty=difficulty)
+                          ["zip_path"])
+        devices = {n.split("/")[1] for n in names if n.startswith("extracts/")}
+        assert devices == {f"device_{n:02d}" for n in range(1,
+                                                            difficulty + 1)}
+
+
+def test_evidence_acquisition_log_layout(tmp_path):
+    # LOCKED: examiner, tool, SHA-256 of each extract, notes.
+    for difficulty in (1, 2, 3):
+        members = _contents(_generate(tmp_path, difficulty=difficulty)
+                            ["zip_path"])
+        log = members[ACQUISITION_LOG].decode()
+        assert re.search(r"^Examiner: \S", log, re.M)
+        assert re.search(r"^Tool: \S", log, re.M)
+        assert "\nNotes:\n" in log
+        listed = dict(re.findall(r"^  ([0-9a-f]{64})  (\S+)$", log, re.M))
+        extracts = {n: d for n, d in members.items()
+                    if n.startswith("extracts/")}
+        assert {name: digest for digest, name in listed.items()} == {
+            name: hashlib.sha256(data).hexdigest()
+            for name, data in extracts.items()}
