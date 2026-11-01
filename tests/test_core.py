@@ -7,7 +7,9 @@ import binascii
 import io
 import json
 import random
+import re
 import sqlite3
+import uuid
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -18,13 +20,18 @@ from PIL import Image
 
 import poligon.core.generate as gen_mod
 from poligon.core import history
-from poligon.core.flag import load_solution
+from poligon.core.flag import generate_flag, load_solution, store_solution
 from poligon.core.generate import generate
 from poligon.core.templates.android import (
+    _TS_END,
+    _TS_START,
     CONTACTS_XML,
     FLAG_ROW,
+    MESSAGE_COUNT,
     MESSAGES_DB,
     PHOTO_DIR,
+    _exif_datetime,
+    flag_fragment,
 )
 
 PHOTO_001 = f"{PHOTO_DIR}/photo_001.jpg"
@@ -241,3 +248,114 @@ def test_generate_result_shape(tmp_path, isolated_history):
     assert Path(result["zip_path"]).is_absolute()
     assert Path(result["scenario_dir"]).is_absolute()
     assert history.load_history()[0]["scenario_id"] == result["scenario_id"]
+
+
+# --- mutation sweep: flag, solution, generate(), history -------------------
+
+FLAG_SHAPE = r"\{[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}\}"
+
+
+def test_generate_flag_shape():
+    for _ in range(200):
+        assert re.fullmatch("FLAG" + FLAG_SHAPE, generate_flag())
+    assert re.fullmatch("CTF" + FLAG_SHAPE, generate_flag("CTF"))
+
+
+def test_load_solution_round_trip(tmp_path):
+    store_solution(tmp_path, "FLAG{0000_1111_2222}", ["one", "two"])
+    assert load_solution(tmp_path) == {"flag": "FLAG{0000_1111_2222}",
+                                       "hints": ["one", "two"]}
+
+
+def test_load_solution_without_hints(tmp_path):
+    (tmp_path / "solution.json").write_text('{"flag": "FLAG{x}"}',
+                                            encoding="utf-8")
+    assert load_solution(tmp_path) == {"flag": "FLAG{x}", "hints": []}
+
+
+def test_generate_flag_prefix(tmp_path):
+    default = _generate(tmp_path)
+    assert re.fullmatch("FLAG" + FLAG_SHAPE, load_solution(
+        Path(default["scenario_dir"]))["flag"])
+    custom = generate("android", 1, 1337, flag_prefix="CTF",
+                      output_dir=tmp_path / "out")
+    assert custom["flag_prefix"] == "CTF"
+    assert re.fullmatch("CTF" + FLAG_SHAPE, load_solution(
+        Path(custom["scenario_dir"]))["flag"])
+
+
+def test_generate_error_messages(tmp_path):
+    with pytest.raises(ValueError, match="Unknown template 'unknown'"):
+        _generate(tmp_path, template="unknown")
+    with pytest.raises(ValueError, match="Invalid difficulty 0"):
+        _generate(tmp_path, difficulty=0)
+
+
+def test_generate_honours_output_dir(tmp_path, monkeypatch):
+    default_dir = tmp_path / "default"
+    monkeypatch.setattr(gen_mod, "DEFAULT_OUTPUT_DIR", default_dir)
+    result = _generate(tmp_path)
+    assert Path(result["scenario_dir"]).parent == (tmp_path / "out").resolve()
+    assert Path(result["zip_path"]).is_file()
+    assert not default_dir.exists()
+
+
+def test_generate_never_reuses_a_scenario_dir(tmp_path, monkeypatch):
+    fixed = uuid.UUID(int=1, version=4)
+    monkeypatch.setattr(gen_mod.uuid, "uuid4", lambda: fixed)
+    first = _generate(tmp_path, seed=1)
+    solution = (Path(first["scenario_dir"]) / "solution.json").read_bytes()
+    with pytest.raises(FileExistsError):
+        _generate(tmp_path, seed=2)
+    assert (Path(first["scenario_dir"]) / "solution.json").read_bytes() \
+        == solution
+
+
+def test_history_entry_defaults_unsolved(isolated_history):
+    history.append_entry("id-1", "android", 1, 1)
+    assert history.load_history()[0]["solved"] is False
+
+
+# --- mutation sweep: Template A --------------------------------------------
+
+
+@pytest.mark.parametrize("flag, fragment", [
+    ("FLAG{aaaa_bbbb_cccc}", "bbbb"),   # middle group
+    ("X{aaaa_bbbb}", "bbbb"),           # two groups: the second
+    ("FLAG{a_b_c_d}", "c"),             # four groups: index len // 2
+    ("X_{aaaa_bbbb}", "bbbb"),          # body starts right after "{"
+    ("X{_a_b}", "a"),                   # empty first group still counts
+    ("FLAG{abcdef}", "{abc"),           # one group: middle third instead
+    ("abcdef}", "cd"),                  # no "{": middle third
+    ("abcdefghijkl", "efgh"),           # no braces: middle third
+    ("ab", "b"),                        # short: third is at least 1
+])
+def test_flag_fragment(flag, fragment):
+    assert flag_fragment(flag) == fragment
+
+
+def test_flag_fragment_never_the_inner_value():
+    assert flag_fragment("FLAG{abcdef}") != "abcdef"
+
+
+def test_exif_datetime_format():
+    assert _exif_datetime(_TS_START) == "2025:01:01 00:00:00"
+
+
+def test_android_timestamps_fixed_window(tmp_path):
+    # Fixed 2025 window, never the wall clock: message times, photo EXIF
+    # DateTime and zip member times.
+    for difficulty in (1, 2, 3):
+        result = _generate(tmp_path, difficulty=difficulty, seed=difficulty)
+        stamps = [row[3] for row in _messages_rows(result["zip_path"],
+                                                   tmp_path)]
+        assert stamps == sorted(stamps)
+        assert len(set(stamps)) == len(stamps)
+        last = _TS_END + MESSAGE_COUNT[difficulty] * 86400
+        assert all(_TS_START < t <= last for t in stamps)
+        with zipfile.ZipFile(result["zip_path"]) as zf:
+            assert {i.date_time[0] for i in zf.infolist()} == {2025}
+            for name in zf.namelist():
+                if name.endswith(".jpg"):
+                    exif = Image.open(io.BytesIO(zf.read(name))).getexif()
+                    assert exif[0x0132].startswith("2025:")

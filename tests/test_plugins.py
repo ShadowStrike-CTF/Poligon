@@ -18,9 +18,11 @@ from poligon._vendor.megdan_schema import (
     ChallengeItem,
     PoERecord,
     ScoreResult,
+    Slot,
     SolverChallengeItem,
     check_no_answer_fields,
 )
+from poligon._vendor.megdan_schema.plugin import ENTRY_POINT_GROUPS
 from poligon.core import config, plugins
 from poligon.core.plugins import (
     load_plugins,
@@ -388,3 +390,152 @@ def test_cli_plugins_list_allow_plugin(home):
         "dummy-provider 0.0.1 scenario_provider",
         "dummy-scorer 0.0.1 scorer",
     ]
+
+
+# --- mutation sweep: loading order, isolation, copies, gates ---------------
+
+
+class _EntryPoint:
+    """Stands in for an importlib.metadata entry point."""
+
+    def __init__(self, name, obj):
+        self.name = name
+        self._obj = obj
+
+    def load(self):
+        return self._obj
+
+
+def _registered(monkeypatch, providers=(), scorers=()):
+    """Serve exactly these (name, attribute-of-dummy_plugins) entry points,
+    in this order."""
+    import dummy_plugins
+    table = {ENTRY_POINT_GROUPS[Slot.SCENARIO_PROVIDER]: providers,
+             ENTRY_POINT_GROUPS[Slot.SCORER]: scorers}
+    monkeypatch.setattr(plugins, "_entry_points", lambda group: [
+        _EntryPoint(name, getattr(dummy_plugins, attr))
+        for name, attr in table.get(group, ())])
+
+
+def _loaded(name, slot, obj):
+    return plugins.LoadedPlugin(name, "0.0.1", slot, obj)
+
+
+def test_skipped_plugin_does_not_stop_later_ones(dummies, monkeypatch):
+    _registered(monkeypatch, providers=[
+        ("dummy-provider-api2", "provider_api2"),
+        ("dummy-provider", "provider")])
+    loaded = load_plugins(["dummy-provider-api2", "dummy-provider"])
+    assert [p.name for p in loaded] == ["dummy-provider"]
+
+
+def test_duplicate_registration_loaded_once(dummies, monkeypatch, caplog):
+    _registered(monkeypatch, providers=[
+        ("dummy-provider", "provider"),
+        ("dummy-provider", "provider"),
+        ("dummy-provider-raises", "provider_raises")])
+    with caplog.at_level(logging.WARNING, logger="poligon.plugins"):
+        loaded = load_plugins(["dummy-provider", "dummy-provider-raises"])
+    assert [p.name for p in loaded] == ["dummy-provider",
+                                        "dummy-provider-raises"]
+    assert "registered twice" in _warnings(caplog)
+
+
+def test_providers_after_a_scorer_still_run(dummies):
+    scorer, = load_plugins(["dummy-scorer"])
+    provider, = load_plugins(["dummy-provider"])
+    items = run_scenario_providers(CONTEXT, INVENTORY, [scorer, provider])
+    assert len(items) == len(INVENTORY)
+
+
+@pytest.mark.parametrize("bad", ["dummy-provider-raises",
+                                 "dummy-provider-not-a-list"])
+def test_failing_provider_does_not_stop_later_ones(dummies, bad):
+    failing, = load_plugins([bad])
+    provider, = load_plugins(["dummy-provider"])
+    items = run_scenario_providers(CONTEXT, INVENTORY, [failing, provider])
+    assert len(items) == len(INVENTORY)
+
+
+def test_provider_gets_deep_copies():
+    class NestedChanges:
+        def provide(self, context, inventory):
+            context["nested"]["changed"] = True
+            inventory[0]["locator"]["rowid"] = -1
+            return []
+
+    context = {"nested": {}}
+    inventory = copy.deepcopy(INVENTORY)
+    run_scenario_providers(context, inventory, [_loaded(
+        "nested-changes", Slot.SCENARIO_PROVIDER, NestedChanges())])
+    assert context == {"nested": {}}
+    assert inventory == INVENTORY
+
+
+def test_withheld_item_does_not_drop_later_items(dummies, monkeypatch):
+    items = _provide("dummy-provider")
+    assert len(items) == 2
+    real = plugins.to_solver_item
+
+    def leaks_first(item):
+        solver = real(item)
+        if item.challenge_id == items[0].challenge_id:
+            return solver.model_copy(update={"title": item.answers[0]})
+        return solver
+
+    monkeypatch.setattr(plugins, "to_solver_item", leaks_first)
+    out = solver_items(items)
+    assert [s.challenge_id for s in out] == [items[1].challenge_id]
+
+
+@pytest.mark.parametrize("output", [
+    {"points": 1, "max_points": 1, "detail": "ok", "extra": 1},
+    {"points": 1, "max_points": 1},
+    5,
+    None,
+])
+def test_scorer_output_gate(dummies, caplog, output):
+    class Fixed:
+        def score(self, item, submission):
+            return copy.deepcopy(output)
+
+    scorer = _loaded("fixed-output", Slot.SCORER, Fixed())
+    with caplog.at_level(logging.WARNING, logger="poligon.plugins"):
+        assert score_submission("fixed-output", _item(), {}, [scorer]) \
+            is None
+    assert "invalid score result" in _warnings(caplog)
+
+
+def test_scorer_gets_deep_copy_of_submission(dummies):
+    class NestedChanges:
+        def score(self, item, submission):
+            submission["answer"]["parts"].append("changed")
+            return {"points": 0, "max_points": 1, "detail": "no"}
+
+    submission = {"answer": {"parts": ["a"]}}
+    scorer = _loaded("nested-changes", Slot.SCORER, NestedChanges())
+    assert score_submission("nested-changes", _item(), submission,
+                            [scorer]).points == 0
+    assert submission == {"answer": {"parts": ["a"]}}
+
+
+def test_scorer_invalid_host_item_message(dummies):
+    loaded = load_plugins(["dummy-scorer"])
+    with pytest.raises(ValueError, match="invalid challenge item"):
+        score_submission("dummy-scorer", {"title": "not an item"}, {}, loaded)
+
+
+def test_config_explicit_path(home, tmp_path):
+    path = tmp_path / "elsewhere.toml"
+    path.write_text('[plugins]\nallow = ["a", "b"]\n', encoding="utf-8")
+    assert config.load_allowlist(path) == ["a", "b"]
+    assert config.allowlist(["c", "a"], path=path) == ["a", "b", "c"]
+    assert config.load_allowlist() == []
+
+
+@pytest.mark.parametrize("text", ["[other]\nkey = 1\n", "[plugins]\n"])
+def test_config_without_allow_is_quietly_empty(home, caplog, text):
+    _write_config(home, text)
+    with caplog.at_level(logging.WARNING, logger="poligon.plugins"):
+        assert config.load_allowlist() == []
+    assert _warnings(caplog) == ""

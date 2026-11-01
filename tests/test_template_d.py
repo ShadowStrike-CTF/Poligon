@@ -5,6 +5,7 @@
 import base64
 import datetime
 import io
+import re
 import sqlite3
 import zipfile
 
@@ -16,10 +17,14 @@ from poligon.core.templates.browser import (
     DANGEROUS_FILE,
     HISTORY_NAME,
     REFERRER_DECOY_COUNT,
+    CHAIN_LENGTH,
+    MIN_URL_COUNT,
     REFERRER_TITLE,
     TemplateDConfig,
     _to_webkit_ts,
+    build_challenge,
 )
+import poligon.core.templates.browser as browser
 
 FLAG = "FLAG{d3ad_b33f_cafe}"
 # INV-P1: History holds the flag encoded, never raw. Hex where base64's "/"
@@ -187,3 +192,139 @@ def test_template_d_seed_reproducible():
         first = _flag_locations(_zip(mode), MODE_NEEDLE[mode])
         assert first
         assert first == _flag_locations(_zip(mode), MODE_NEEDLE[mode])
+
+
+# --- mutation sweep ---------------------------------------------------------
+
+UTC = datetime.timezone.utc
+UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+
+
+def _open(zip_bytes):
+    con = sqlite3.connect(":memory:")
+    con.deserialize(_member(zip_bytes, HISTORY_NAME))
+    return con
+
+
+def _chain_zip(seed):
+    return generate_template_d(TemplateDConfig(
+        flag=FLAG, mode="referrer_chain", seed=seed))
+
+
+def test_to_webkit_ts_exact():
+    # Microseconds since 1601-01-01 UTC, as an integer.
+    assert _to_webkit_ts(datetime.datetime(1601, 1, 1, 0, 0, 1,
+                                           tzinfo=UTC)) == 1_000_000
+    unix_epoch = _to_webkit_ts(datetime.datetime(1970, 1, 1, tzinfo=UTC))
+    assert unix_epoch == 11_644_473_600 * 10**6
+    assert type(unix_epoch) is int
+
+
+def test_template_d_times_fixed_window(db):
+    # Fixed 2025 window, never the wall clock.
+    low = _to_webkit_ts(datetime.datetime(2025, 1, 1, tzinfo=UTC))
+    high = _to_webkit_ts(datetime.datetime(2026, 1, 1, tzinfo=UTC))
+    for mode in ("url_path", "download_filename", "referrer_chain"):
+        con = db(mode)
+        times = [r[0] for r in con.execute("SELECT visit_time FROM visits")]
+        times += [t for row in con.execute(
+            "SELECT start_time, end_time FROM downloads") for t in row]
+        assert all(low <= t < high for t in times)
+    with zipfile.ZipFile(io.BytesIO(_zip())) as zf:
+        assert {i.date_time[0] for i in zf.infolist()} == {2025}
+
+
+def test_template_d_decoy_titles_flag_shaped():
+    # Decoys must decode to flags of the same shape and prefix as the real
+    # one, so strings alone cannot tell them apart.
+    con = _open(_chain_zip(SEED))
+    decoded = [base64.b64decode(title[len(REFERRER_TITLE):]).decode()
+               for (title,) in con.execute(
+                   "SELECT title FROM urls WHERE title LIKE ?",
+                   (REFERRER_TITLE + "%",))]
+    assert len(decoded) == REFERRER_DECOY_COUNT + 1
+    assert FLAG in decoded
+    for value in decoded:
+        assert re.fullmatch(r"FLAG\{[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}\}",
+                            value)
+
+
+def test_template_d_referrer_chain_shape():
+    # The dangerous download points at the chain leaf; the chain has
+    # CHAIN_LENGTH single visits, root first, in time order.
+    for seed in range(20):
+        con = _open(_chain_zip(seed))
+        [referrer] = con.execute(
+            "SELECT referrer FROM downloads WHERE danger_type = ?",
+            (DANGEROUS_FILE,)).fetchone()
+        [(visit_id,)] = con.execute(
+            "SELECT v.id FROM visits v JOIN urls u ON u.id = v.url "
+            "WHERE u.url = ?", (referrer,)).fetchall()
+        chain = []
+        while visit_id:
+            chain.append(con.execute(
+                "SELECT v.visit_time, v.from_visit, u.title FROM visits v "
+                "JOIN urls u ON u.id = v.url WHERE v.id = ?",
+                (visit_id,)).fetchone())
+            visit_id = chain[-1][1]
+        chain.reverse()
+        assert len(chain) == CHAIN_LENGTH, seed
+        assert chain[0][2] == REFERRER_TITLE + FLAG_B64
+        times = [t for t, _, _ in chain]
+        assert times == sorted(times) and len(set(times)) == len(times), seed
+
+
+def test_template_d_visit_ids_consistent():
+    # Visit ids run 1..n; every from_visit is 0 or an earlier visit.
+    for seed in range(5):
+        for mode in ("url_path", "referrer_chain"):
+            con = _open(generate_template_d(TemplateDConfig(
+                flag=FLAG, mode=mode, seed=seed)))
+            rows = con.execute("SELECT id, from_visit FROM visits "
+                               "ORDER BY id").fetchall()
+            assert [r[0] for r in rows] == list(range(1, len(rows) + 1))
+            assert all(0 <= parent < vid for vid, parent in rows)
+
+
+def test_template_d_urls_visit_summary(db):
+    # urls.visit_count / last_visit_time summarise that URL's own visits.
+    con = db("referrer_chain")
+    rows = con.execute(
+        "SELECT u.id, u.visit_count, u.last_visit_time, "
+        "COUNT(v.id), MAX(v.visit_time) FROM urls u "
+        "JOIN visits v ON v.url = u.id GROUP BY u.id").fetchall()
+    assert len(rows) == con.execute("SELECT COUNT(*) FROM urls").fetchone()[0]
+    for _, count, last, real_count, real_last in rows:
+        assert (count, last) == (real_count, real_last)
+
+
+def test_template_d_urls_unique_despite_repeats(monkeypatch):
+    # Force every generated URL to come up twice: urls must stay unique.
+    counter = iter(range(10**6))
+    monkeypatch.setattr(browser, "_random_url",
+                        lambda fake: f"https://h{next(counter) // 2}.example/")
+    _, data = build_challenge(TemplateDConfig(flag=FLAG, url_count=40,
+                                              download_count=3))
+    urls = [r[0] for r in _open(data).execute("SELECT url FROM urls")]
+    assert len(urls) == 40
+    assert len(set(urls)) == 40
+
+
+def test_template_d_minimum_counts_accepted():
+    name, data = build_challenge(TemplateDConfig(
+        flag=FLAG, url_count=MIN_URL_COUNT, download_count=1,
+        mode="referrer_chain"))
+    con = _open(data)
+    assert con.execute("SELECT COUNT(*) FROM urls").fetchone()[0] \
+        == MIN_URL_COUNT
+    assert con.execute("SELECT COUNT(*) FROM downloads").fetchone()[0] == 1
+
+
+def test_template_d_zip_naming():
+    name, data = build_challenge(TemplateDConfig(flag=FLAG))
+    assert re.fullmatch(f"poligon_template_d_({UUID})\\.zip", name)
+    challenge_id = name[len("poligon_template_d_"):-len(".zip")]
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        assert sorted(zf.namelist()) == sorted(
+            f"challenge_{challenge_id}/{n}" for n in (HISTORY_NAME,
+                                                      CHALLENGE_TXT))
