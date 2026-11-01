@@ -22,6 +22,7 @@ from pathlib import Path
 
 from faker import Faker
 
+from poligon._vendor.megdan_schema.encoding import encode_hex
 from poligon.core.templates.filesystem import split_flag
 
 ZIP_NAME = "challenge.zip"
@@ -89,7 +90,8 @@ def _b64(text: str) -> str:
 
 
 def _hex(text: str) -> str:
-    return text.encode("utf-8").hex()
+    """Lowercase hex of the UTF-8 text — the vendored megdan-schema encoder."""
+    return encode_hex(text)
 
 
 def _random_ts() -> int:

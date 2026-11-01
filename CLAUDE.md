@@ -18,6 +18,9 @@ templates/template_e.py — Template E (JSON EVTX export)
 templates/template_f.py — Template F (iOS FFS extraction)
 flag.py — flag generation + solution.json storage
 history.py — append-only training record (~/.poligon/history.json)
+config.py — read-only ~/.poligon/config.toml (plugins.allow) + --allow-plugin helper
+plugins.py — plugin host: scenario provider + scorer slots, invariants on plugin output
+(src/poligon/_vendor/megdan_schema/ — pinned megdan-schema v0.1.0, never edited)
 
 ## Sarissa integration stub
 Include in generate() output path:
@@ -358,7 +361,8 @@ behaviour is exactly v1.3.2.
 - /api/plugins → [] with no plugins; `poligon plugins list` with none and with a dummy
 - tests/test_vendored.py: hashes, file set, encoder byte-identity property test
 - Full v1.3.2 suite (116 + 90 property tests) passes unchanged
-- Tests: 116 → ~140 regular (+90 property, unchanged); exact count recorded at release
+- Tests: 116 → 156 regular (tests/test_plugins.py: 35; tests/test_vendored.py: 5);
+  property tests unchanged at 90 — 206 → 246 in all
 
 ### Release
 - Version 1.3.2 → 1.4.0. No tag pushed

@@ -1,0 +1,4 @@
+Metadata-Version: 2.1
+Name: dummy-plugins
+Version: 0.0.0
+Summary: Test-only dummy plugins for Poligon's plugin slots. Never installed.
