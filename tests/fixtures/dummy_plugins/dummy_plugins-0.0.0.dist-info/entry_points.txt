@@ -1,0 +1,18 @@
+[megdan.poligon.scenario_providers]
+dummy-provider = dummy_plugins:provider
+dummy-provider-api2 = dummy_plugins:provider_api2
+dummy-provider-raises = dummy_plugins:provider_raises
+dummy-provider-import-error = dummy_broken:provider
+dummy-provider-not-a-list = dummy_plugins:provider_not_a_list
+dummy-provider-invalid-item = dummy_plugins:provider_invalid_item
+dummy-provider-leaks-answer = dummy_plugins:provider_leaks_answer
+dummy-provider-unsourced = dummy_plugins:provider_unsourced
+dummy-provider-renamed = dummy_plugins:provider_renamed
+
+[megdan.poligon.scorers]
+dummy-scorer = dummy_plugins:scorer
+dummy-scorer-api2 = dummy_plugins:scorer_api2
+dummy-scorer-raises = dummy_plugins:scorer_raises
+dummy-scorer-invalid = dummy_plugins:scorer_invalid
+dummy-scorer-out-of-range = dummy_plugins:scorer_out_of_range
+dummy-scorer-leaks-answer = dummy_plugins:scorer_leaks_answer

