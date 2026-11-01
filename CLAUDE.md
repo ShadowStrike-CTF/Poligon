@@ -18,6 +18,9 @@ templates/template_e.py — Template E (JSON EVTX export)
 templates/template_f.py — Template F (iOS FFS extraction)
 flag.py — flag generation + solution.json storage
 history.py — append-only training record (~/.poligon/history.json)
+config.py — read-only ~/.poligon/config.toml (plugins.allow) + --allow-plugin helper
+plugins.py — plugin host: scenario provider + scorer slots, invariants on plugin output
+(src/poligon/_vendor/megdan_schema/ — pinned megdan-schema v0.1.0, never edited)
 
 ## Sarissa integration stub
 Include in generate() output path:
@@ -256,3 +259,122 @@ Never use ProcessPoolExecutor — fork-bombs under PyInstaller.
   - Never invent a new encoding scheme (hex for 4732 is evidence._hex)
   - Never weaken INV-P1 or INV-P3 (skip, xfail, narrow needles) to get green
   - Never push a tag
+
+## v1.4.0 — plugin slots + vendored megdan-schema
+Wording: follow the neutral-terms rule supplied in task briefs.
+Slot vocabulary only: plugin, extension, scenario provider, scorer. Never describe what any
+particular plugin does — in code, docs, tests, commits or PR text.
+
+Spec: Megdan Plugin Interface Spec v0.1.1. Like a power board: Poligon provides sockets of a
+standard shape; an empty socket breaks nothing. With no plugins installed or allowlisted,
+behaviour is exactly v1.3.2.
+
+### Vendored megdan-schema
+- megdan-schema is not on PyPI; Poligon vendors a pinned copy of tag v0.1.0
+  (commit b0f182cc807844f875085d95cce2e56562fdfad3) from
+  https://github.com/ShadowStrike-CTF/megdan-schema
+- Path: src/poligon/_vendor/megdan_schema/ — every file of src/megdan_schema/ at that tag,
+  copied byte-for-byte, never edited in place (relative imports make it relocatable)
+- src/poligon/_vendor/megdan_schema/VENDORED.txt: source repo, tag, commit, then one
+  `<sha256>  megdan_schema/<file>` line per file (the output of the repo's
+  tools/vendor_check.py)
+- tests/test_vendored.py asserts every hash matches and the file set is exactly the listed one
+- Upgrade = re-vendor from a newer tag and update VENDORED.txt in the same commit
+- Dependency: pydantic>=2.4 is declared explicitly (megdan-schema needs it; it previously
+  came in only through fastapi)
+
+### Shared helper move (output byte-identical)
+- android.encode_flag(flag) → thin wrapper over the vendored encode_b64
+- evidence._hex(text)       → thin wrapper over the vendored encode_hex
+- browser.py and template_e.py import encode_b64 / encode_hex from the vendored package and
+  no longer import a private function from evidence.py
+- Out of scope, left as they are: evidence._b64, filesystem._b64, template_f.py's inline
+  base64
+- Proof: existing template tests, INV-P1, solvability and the property tests pass unchanged,
+  plus a property test that the vendored encoders equal the v1.3.2 implementations on
+  arbitrary text
+
+### Slots (Poligon hosts two of the spec's three; the panel slot belongs to Sarissa)
+- megdan.poligon.scenario_providers: provide(context: dict, inventory: list[dict]) -> list[dict]
+  (each dict a megdan-schema ChallengeItem)
+- megdan.poligon.scorers: score(item: dict, submission: dict) -> dict (a ScoreResult:
+  points, max_points, detail)
+- Every plugin object exposes PLUGIN_API, NAME ([a-z0-9_-]), VERSION, describe() ->
+  {name, version, api, slot}
+- Discovery: importlib.metadata.entry_points(group=…) — no new dependency
+
+### Loading rules
+- LR-1 allowlist: ~/.poligon/config.toml, `[plugins]` table, `allow = [...]`; default empty.
+  New file — Poligon never had a config file and never writes this one (read-only; tomllib).
+  Missing file = empty allowlist; unreadable/malformed file = logged warning, empty allowlist.
+  CLI override `--allow-plugin NAME` (repeatable) is added to the config allowlist.
+  The entry-point name is checked against the allowlist BEFORE the entry point is loaded,
+  so code that is not allowlisted is never imported; after loading, NAME must equal the
+  entry-point name or the plugin is skipped
+- LR-2 API major: PLUGIN_API major must equal the vendored PLUGIN_API major
+  (is_api_compatible); mismatch → logged warning, skipped
+- LR-3 failure isolation: import error, missing attribute, describe() not a valid
+  PluginDescription (or not matching NAME / VERSION / slot), exception in the slot callable,
+  or schema-invalid output → logged, that plugin (or that item) skipped, core continues
+- LR-4 (no browser code) concerns Sarissa's panel slot only; Poligon does not discover the
+  panel group
+- LR-5 GET /api/plugins → [{name, version, slot}] only; [] by default
+- Logger: logging.getLogger("poligon.plugins")
+
+### Host functions (src/poligon/core/plugins.py — core only, shared by CLI and web)
+- load_plugins(allow) → loaded plugins (both slots), after LR-1/2/3
+- run_scenario_providers(context, inventory, plugins) → setter-side ChallengeItems.
+  `inventory` comes from the caller — Poligon has no point-of-entry inventory of its own.
+  generate() is unchanged and nothing calls providers automatically in v1.4.0
+- solver_items(items) → to_solver_item() view for anything bound for a solver-side client
+- score_submission(name, item, submission, plugins) → ScoreResult or None. No new route
+  and no solve flow in v1.4.0
+- Every plugin input (context, inventory, item, submission) is passed as a deep copy
+
+### Core-enforced invariants on plugin output (failing item/result dropped + logged)
+- Schema: provider items validated as ChallengeItem, scorer results as ScoreResult
+- INV-P1: check_no_plaintext_flag({"title": …, "prompt": …}, answer) for every answer of the
+  item — solver-visible text never carries an answer
+- INV-P2: check_answer_provenance(item, inventory) — every answer equals the raw_value or
+  normalised_value of a point-of-entry record the item cites
+- INV-P3: solver_items() output passes check_no_answer_fields; a scorer result's detail is
+  checked with check_no_plaintext_flag against the item's answers (detail goes to the solver)
+- Score bounds: 0 ≤ points ≤ max_points, otherwise clamp_score() + logged warning
+
+### CLI / web
+- `poligon plugins list [--allow-plugin NAME …]` → one line per loaded plugin
+  (name, version, slot), or "No plugins loaded."
+- `poligon-web [--allow-plugin NAME …]` (also via python -m poligon); create_app(allow=…)
+  loads plugins once at startup
+- `poligon generate` is unchanged
+
+### Test plan
+- Dummy plugins in tests/fixtures/dummy_plugins/, one per slot, plus misbehaving variants
+  (wrong API major, raising, invalid output, invariant-breaking). Registered through a
+  test-only entry point: a committed dummy_plugins-0.0.0.dist-info/entry_points.txt under
+  tests/fixtures/, put on sys.path by a test fixture only — pyproject.toml gains no entry
+  points
+- Per slot: loads when allowlisted · skipped when not · skipped on API mismatch · exception
+  isolated · invalid output dropped · invariants enforced on plugin output (provider:
+  INV-P1/P2/P3; scorer: INV-P1/P3 on detail, score bounds) · listed by /api/plugins
+- Config: file allowlist read, CLI override adds, missing/malformed file = empty allowlist
+- /api/plugins → [] with no plugins; `poligon plugins list` with none and with a dummy
+- tests/test_vendored.py: hashes, file set, encoder byte-identity property test
+- Full v1.3.2 suite (116 + 90 property tests) passes unchanged
+- Tests: 116 → 156 regular (tests/test_plugins.py: 35; tests/test_vendored.py: 5);
+  property tests unchanged at 90 — 206 → 246 in all
+
+### Release
+- Version 1.3.2 → 1.4.0. No tag pushed
+
+### What NOT to do
+- Never edit a vendored file — re-vendor from a tag instead
+- Never import or reference a non-public plugin in tests, docs or code
+- Never describe what a particular plugin does
+- Never load a plugin that is not allowlisted, or import its code to find out its NAME
+- Never pass host objects to a plugin by reference — deep copies only
+- Never send a ChallengeItem (answers, poe_refs) to a solver-side client — solver_items() only
+- Never let a plugin failure propagate out of the core
+- Never call providers from generate() in v1.4.0
+- Never weaken INV-P1/P2/P3 to make a plugin test pass
+- Never push a tag

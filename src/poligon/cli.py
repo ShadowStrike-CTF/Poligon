@@ -12,7 +12,9 @@ import shutil
 import sys
 from pathlib import Path
 
+from poligon.core.config import add_allow_plugin_arg, allowlist
 from poligon.core.generate import generate  # NEVER from poligon.core import generate
+from poligon.core.plugins import load_plugins
 
 _TEMPLATES = {"android", "filesystem", "evidence", "browser", "evtx", "ios"}
 
@@ -51,12 +53,33 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Output zip path (default: poligon_<template>_<seed>.zip)",
     )
+
+    plugins = commands.add_parser("plugins", help="Inspect installed plugins")
+    plugin_cmds = plugins.add_subparsers(dest="plugins_command", required=True,
+                                         parser_class=_Parser)
+    plugin_list = plugin_cmds.add_parser(
+        "list", help="List loaded plugins (name, version, slot)")
+    add_allow_plugin_arg(plugin_list)
     return parser
+
+
+def _plugins_list(args: argparse.Namespace) -> None:
+    loaded = load_plugins(allowlist(args.allow_plugin))
+    if not loaded:
+        print("No plugins loaded.")
+        return
+    for plugin in loaded:
+        info = plugin.public()
+        print(f"{info['name']} {info['version']} {info['slot']}")
 
 
 def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
+
+    if args.command == "plugins":
+        _plugins_list(args)
+        return
 
     output_path = (
         Path(args.output)
