@@ -61,7 +61,7 @@ def create_app(allow: Iterable[str] = ()) -> FastAPI:
     ~/.poligon/config.toml. Plugins are loaded once, here."""
     # No CORS: Sarissa proxies server-to-server and its browser never calls
     # Poligon directly (INV-P3).
-    app = FastAPI(title="Poligon", docs_url=None, redoc_url=None)
+    app = FastAPI(title="Poligon", docs_url=None, redoc_url=None, openapi_url=None)
     plugins = load_plugins(allowlist(allow))
 
     @app.get("/")
