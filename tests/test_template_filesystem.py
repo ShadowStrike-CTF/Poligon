@@ -160,3 +160,23 @@ def test_filesystem_history_recorded(tmp_path, isolated_history):
     assert latest["template"] == "filesystem"
     assert latest["difficulty"] == 2
     assert latest["seed"] == 5
+
+
+# --- mutation sweep ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("flag, halves", [
+    ("abcdef", ("abc", "def")),
+    ("abcdefg", ("abc", "defg")),     # odd: extra character to half 2
+    ("FLAG{0000_1111_2222}", ("FLAG{0000_", "1111_2222}")),
+])
+def test_split_flag_halves(flag, halves):
+    assert split_flag(flag) == halves
+
+
+def test_filesystem_zip_times_fixed_window(tmp_path):
+    # Fixed 2025 window, never the wall clock.
+    for difficulty in (1, 2, 3):
+        result = _generate(tmp_path, difficulty=difficulty)
+        with zipfile.ZipFile(result["zip_path"]) as zf:
+            assert {i.date_time[0] for i in zf.infolist()} == {2025}
