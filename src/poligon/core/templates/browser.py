@@ -25,9 +25,8 @@ from typing import Optional
 
 from faker import Faker
 
+from poligon._vendor.megdan_schema.encoding import encode_b64, encode_hex
 from poligon.core.flag import generate_flag
-from poligon.core.templates.android import encode_flag
-from poligon.core.templates.evidence import _hex
 
 ZIP_NAME = "challenge.zip"
 HISTORY_NAME = "History"            # no extension — exactly like real Chrome
@@ -163,7 +162,7 @@ def _plant_urls(fake: Faker, config: TemplateDConfig,
     if config.mode == "url_path":
         idx = random.randrange(len(urls))
         urls[idx] = {
-            "url": f"https://internal.corp.example/files/{_hex(config.flag)}"
+            "url": f"https://internal.corp.example/files/{encode_hex(config.flag)}"
                    f"/report.pdf",
             "title": "Internal file share — report.pdf",
         }
@@ -176,13 +175,13 @@ def _plant_urls(fake: Faker, config: TemplateDConfig,
     chain, decoys = picked[:CHAIN_LENGTH], picked[CHAIN_LENGTH:]
     urls[chain[0]] = {
         "url": f"https://panel.{fake.domain_word()}.invalid/login",
-        "title": REFERRER_TITLE + encode_flag(config.flag),
+        "title": REFERRER_TITLE + encode_b64(config.flag),
     }
     prefix = _flag_prefix(config.flag)
     for idx in decoys:
         urls[idx] = {
             "url": f"https://panel.{fake.domain_word()}.invalid/login",
-            "title": REFERRER_TITLE + encode_flag(generate_flag(prefix)),
+            "title": REFERRER_TITLE + encode_b64(generate_flag(prefix)),
         }
     return chain
 
@@ -244,7 +243,7 @@ def _build_downloads(fake: Faker, config: TemplateDConfig, user: str,
     # The url_path flag URL is never a download referrer — otherwise its
     # hex flag would also land in downloads.referrer / tab_url, a second
     # flag location.
-    flag_hex = _hex(config.flag)
+    flag_hex = encode_hex(config.flag)
     referrers = [i for i, u in enumerate(urls) if flag_hex not in u["url"]]
     downloads = []
     for _ in range(config.download_count):

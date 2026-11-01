@@ -7,11 +7,13 @@ No generation logic lives here. All logic is in poligon.core.
 """
 from __future__ import annotations
 
+import argparse
 import sys
 import threading
 import time
 import uuid
 import webbrowser
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 import uvicorn
@@ -20,8 +22,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 import poligon.core.generate as gen_mod
+from poligon.core.config import add_allow_plugin_arg, allowlist
 from poligon.core.generate import generate  # NEVER from poligon.core import generate
 from poligon.core.history import load_history
+from poligon.core.plugins import load_plugins
 
 PORT = 7333
 HOST = "127.0.0.1"
@@ -52,10 +56,13 @@ def _download_url(scenario_id: str) -> str:
     return f"/api/download/{scenario_id}"
 
 
-def create_app() -> FastAPI:
+def create_app(allow: Iterable[str] = ()) -> FastAPI:
+    """allow: extra plugin names (--allow-plugin), added to plugins.allow in
+    ~/.poligon/config.toml. Plugins are loaded once, here."""
     # No CORS: Sarissa proxies server-to-server and its browser never calls
     # Poligon directly (INV-P3).
     app = FastAPI(title="Poligon", docs_url=None, redoc_url=None)
+    plugins = load_plugins(allowlist(allow))
 
     @app.get("/")
     def index() -> FileResponse:
@@ -89,6 +96,11 @@ def create_app() -> FastAPI:
         return FileResponse(zip_path, media_type="application/zip",
                             filename=f"poligon_{canonical}.zip")
 
+    @app.get("/api/plugins")
+    def list_plugins() -> list[dict]:
+        # LR-5: name, version and slot only.
+        return [plugin.public() for plugin in plugins]
+
     @app.get("/api/history")
     def history() -> list[dict]:
         return [{**entry, "download_url": _download_url(entry["scenario_id"])}
@@ -97,10 +109,20 @@ def create_app() -> FastAPI:
     return app
 
 
-def main() -> None:
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="poligon-web",
+        description=f"Poligon web UI on http://{HOST}:{PORT}.",
+    )
+    add_allow_plugin_arg(parser)
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> None:
     """Start uvicorn on HOST:PORT in a thread and open the browser."""
-    config = uvicorn.Config(create_app(), host=HOST, port=PORT,
-                            log_level="warning")
+    args = _build_parser().parse_args(argv)
+    config = uvicorn.Config(create_app(allow=args.allow_plugin), host=HOST,
+                            port=PORT, log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()

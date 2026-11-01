@@ -6,7 +6,6 @@
 # module-level random stream seeded in core/generate.py — Faker is bound to
 # that same stream rather than its own Random instance.
 
-import base64
 import io
 import random
 import sqlite3
@@ -17,6 +16,8 @@ from pathlib import Path
 
 from faker import Faker
 from PIL import Image, ImageDraw
+
+from poligon._vendor.megdan_schema.encoding import encode_b64
 
 ZIP_NAME = "challenge.zip"
 
@@ -67,7 +68,8 @@ def flag_fragment(flag: str) -> str:
 
 
 def encode_flag(flag: str) -> str:
-    return base64.b64encode(flag.encode("utf-8")).decode("ascii")
+    """Base64 of the UTF-8 flag — the vendored megdan-schema encoder."""
+    return encode_b64(flag)
 
 
 def _random_ts() -> int:
