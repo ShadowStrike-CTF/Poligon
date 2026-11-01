@@ -378,3 +378,13 @@ behaviour is exactly v1.3.2.
 - Never call providers from generate() in v1.4.0
 - Never weaken INV-P1/P2/P3 to make a plugin test pass
 - Never push a tag
+
+## v1.4.1 — housekeeping
+- Tests: 246 → 321 in all (231 regular + 90 property tests). The extra 75 came from the
+  mutation-testing sweep (c1625a9), which did not update the v1.4.0 count above.
+  Property tests (tests/test_properties.py) take most of the ~60 s suite runtime
+- Test extra renamed `dev` → `test` (as in Sarissa, Treska, Zapis); CI installs `.[test]`
+- Test extra uses `httpx2` (Starlette's TestClient prefers it; `httpx` is the fallback)
+- `/openapi.json` no longer served (`openapi_url=None`, as Treska and Zapis)
+- tests.yml: `permissions: contents: read`
+- Version 1.4.0 → 1.4.1. No tag pushed
