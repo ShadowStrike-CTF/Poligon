@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "poligon"
-version = "1.4.0"
+version = "1.4.1"
 description = "CTF practice simulator for digital forensics training and competition prep. by ShadowStrike."
 readme = "README.md"
 license = {text = "MIT"}
@@ -35,7 +35,7 @@ poligon = "poligon.cli:main"
 poligon-web = "poligon.web.main:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "httpx", "hypothesis"]
+test = ["pytest", "httpx2", "hypothesis"]
 
 [project.urls]
 "Source" = "https://github.com/ShadowStrike-CTF/poligon"
