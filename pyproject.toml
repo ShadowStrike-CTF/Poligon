@@ -7,10 +7,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "poligon"
-version = "1.4.1"
+version = "1.5.0"
 description = "CTF practice simulator for digital forensics training and competition prep. by ShadowStrike."
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "Proprietary"}
 authors = [
   {name = "ShadowStrike"},
 ]
@@ -26,7 +26,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Operating System :: OS Independent",
 ]
 
