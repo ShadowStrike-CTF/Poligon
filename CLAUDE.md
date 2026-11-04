@@ -1,6 +1,6 @@
 # Poligon — CTF Practice Simulator
 CTF practice simulator for digital forensics training and competition prep.
-by ShadowStrike. MIT.
+by ShadowStrike. Proprietary — all rights reserved.
 
 ## Dual delivery mode
 CLI: poligon generate android / poligon solve [id]
@@ -388,3 +388,12 @@ behaviour is exactly v1.3.2.
 - `/openapi.json` no longer served (`openapi_url=None`, as Treska and Zapis)
 - tests.yml: `permissions: contents: read`
 - Version 1.4.0 → 1.4.1. No tag pushed
+
+## F04 — licence: MIT → Proprietary
+- LICENSE: all rights reserved, no reproduction/distribution without ShadowStrike's written permission
+- pyproject: `license = {text = "Proprietary"}`, classifier `License :: Other/Proprietary License`
+- Every package .py carries `# © 2026 ShadowStrike. All rights reserved.` in its header
+  (vendored `_vendor/megdan_schema/` excluded — hash-pinned, never edited)
+- README footer: `© 2026 ShadowStrike. All rights reserved. Aut Viam Inveniam Aut Faciam`
+- MIT releases already on PyPI stay MIT; the proprietary licence applies from this version on
+- Version 1.4.1 → 1.5.0. No tag pushed
