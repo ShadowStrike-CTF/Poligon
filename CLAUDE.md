@@ -397,3 +397,17 @@ behaviour is exactly v1.3.2.
 - README footer: `© 2026 ShadowStrike. All rights reserved. Aut Viam Inveniam Aut Faciam`
 - MIT releases already on PyPI stay MIT; the proprietary licence applies from this version on
 - Version 1.4.1 → 1.5.0. No tag pushed
+
+## F12 — GenerateRequest strict validation
+- Bug: a bad `template` / `difficulty` on POST /api/generate got through the request model
+  and was only caught inside generate() (ValueError → the handler's HTTP 400).
+- Fix: GenerateRequest (web/main.py) has `@field_validator`s (Pydantic v2) that check
+  template ∈ TEMPLATES and difficulty ∈ DIFFICULTIES, imported from poligon.core.generate.
+  Bad input → 422 with FastAPI's structured `detail` body, before generate() runs
+- Single source of truth: the web layer never copies TEMPLATES / DIFFICULTIES; a template
+  added to core.generate.TEMPLATES is accepted with zero web-layer changes
+- `difficulty` keeps its default of 1 (additive — callers that leave it out are unaffected);
+  lax typing as before (no strict mode). generate()'s own ValueError guard and the
+  handler's 400 stay as defence in depth
+- Tests: 322 → 325 (tests/test_web.py: unknown template, difficulty 4, difficulty "hard" → 422)
+- Version 1.5.1 → 1.5.2. No tag pushed

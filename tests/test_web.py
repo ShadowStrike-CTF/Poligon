@@ -201,3 +201,29 @@ def test_main_ctrl_c_stops_server(monkeypatch):
 def test_trusted_host_rejects_external(client):
     response = client.get("/", headers={"Host": "evil.local"})
     assert response.status_code == 400
+
+
+# F12 — GenerateRequest validates against core TEMPLATES / DIFFICULTIES.
+
+def test_generate_rejects_unknown_template(client):
+    res = client.post("/api/generate",
+                      json={"template": "macos", "seed": 42, "difficulty": 1})
+    assert res.status_code == 422
+    err = res.json()["detail"][0]
+    assert err["loc"] == ["body", "template"]
+    assert all(t in err["msg"] for t in gen_mod.TEMPLATES)
+
+
+def test_generate_rejects_difficulty_out_of_range(client):
+    res = client.post("/api/generate",
+                      json={"template": "android", "seed": 42, "difficulty": 4})
+    assert res.status_code == 422
+    assert res.json()["detail"][0]["loc"] == ["body", "difficulty"]
+
+
+def test_generate_rejects_difficulty_wrong_type(client):
+    res = client.post("/api/generate",
+                      json={"template": "android", "seed": 42,
+                            "difficulty": "hard"})
+    assert res.status_code == 422
+    assert res.json()["detail"][0]["loc"] == ["body", "difficulty"]
