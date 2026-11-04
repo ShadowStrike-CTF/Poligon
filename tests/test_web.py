@@ -196,3 +196,8 @@ def test_main_ctrl_c_stops_server(monkeypatch):
     assert run.clock.sleeps == []
     assert run.server.should_exit is True
     assert run.thread.joins == [0.5, 5]
+
+
+def test_trusted_host_rejects_external(client):
+    response = client.get("/", headers={"Host": "evil.local"})
+    assert response.status_code == 400
