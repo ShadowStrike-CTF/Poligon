@@ -19,6 +19,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 
 import poligon.core.generate as gen_mod
@@ -63,6 +64,8 @@ def create_app(allow: Iterable[str] = ()) -> FastAPI:
     # Poligon directly (INV-P3).
     app = FastAPI(title="Poligon", docs_url=None, redoc_url=None, openapi_url=None)
     plugins = load_plugins(allowlist(allow))
+    # F02: outermost layer (added last = checked first). Loopback Host headers only.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 
     @app.get("/")
     def index() -> FileResponse:
