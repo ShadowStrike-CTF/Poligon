@@ -411,3 +411,19 @@ behaviour is exactly v1.3.2.
   handler's 400 stay as defence in depth
 - Tests: 322 → 325 (tests/test_web.py: unknown template, difficulty 4, difficulty "hard" → 422)
 - Version 1.5.1 → 1.5.2. No tag pushed
+
+## Security Middleware — TrustedHostMiddleware (F02 — M/1.1.12)
+
+TrustedHostMiddleware is active on this tool. It restricts accepted Host headers
+to 127.0.0.1 and localhost only (allowed_hosts=["127.0.0.1", "localhost"]).
+This is a deliberate security control — not a bug.
+
+WHAT NOT TO DO:
+- Do not remove TrustedHostMiddleware
+- Do not widen allowed_hosts (no "*", no "testserver", no other hosts)
+- Do not remove the tests/conftest.py TestClient patch or revert its default
+  base_url to Starlette's "http://testserver"
+
+Test suite: tests/conftest.py patches TestClient's default base_url to
+"http://127.0.0.1" to match the middleware. If tests fail with 400 Invalid host
+header, check base_url first.
