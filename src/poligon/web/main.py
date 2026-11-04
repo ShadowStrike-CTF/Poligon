@@ -20,11 +20,12 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 import poligon.core.generate as gen_mod
 from poligon.core.config import add_allow_plugin_arg, allowlist
-from poligon.core.generate import generate  # NEVER from poligon.core import generate
+# NEVER from poligon.core import generate
+from poligon.core.generate import DIFFICULTIES, TEMPLATES, generate
 from poligon.core.history import load_history
 from poligon.core.plugins import load_plugins
 
@@ -41,9 +42,25 @@ _GENERATE_LOCK = threading.Lock()
 
 
 class GenerateRequest(BaseModel):
+    # F12: validated against core's TEMPLATES / DIFFICULTIES (single source of
+    # truth, never copied here) so bad input is a 422 before generate() runs.
     template: str
     seed: int
     difficulty: int = 1
+
+    @field_validator("template")
+    @classmethod
+    def template_must_be_valid(cls, v: str) -> str:
+        if v not in TEMPLATES:
+            raise ValueError(f"must be one of {list(TEMPLATES)}")
+        return v
+
+    @field_validator("difficulty")
+    @classmethod
+    def difficulty_must_be_valid(cls, v: int) -> int:
+        if v not in DIFFICULTIES:
+            raise ValueError(f"must be one of {list(DIFFICULTIES)}")
+        return v
 
 
 def static_dir() -> Path:
