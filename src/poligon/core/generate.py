@@ -27,9 +27,14 @@ from poligon.core.templates.template_f import (
     build_challenge as build_challenge_f,
     generate_ios,
 )
+from poligon.core.templates.template_g import (
+    TemplateGConfig,
+    build_challenge as build_challenge_g,
+    generate_macos,
+)
 
 TEMPLATES = ("android", "filesystem", "evidence", "browser", "evtx",
-             "ios")
+             "ios", "macos")
 DIFFICULTIES = (1, 2, 3)
 DEFAULT_OUTPUT_DIR = Path.home() / ".poligon" / "scenarios"
 
@@ -87,6 +92,18 @@ IOS_HINTS = [
     "to overlook.",
 ]
 
+MACOS_HINTS = [
+    "zsh has been the default macOS shell since Catalina — check the "
+    "user's home directory.",
+    "Some macOS databases have no file extension — check a file's header, "
+    "not its name.",
+    "Apple timestamps count seconds from 2001-01-01, not 1970 (zsh history "
+    "is the exception).",
+    "NoteStore.sqlite is Core Data: follow ZNOTEDATA into ZICNOTEDATA, then "
+    "unwrap ZDATA.",
+    "Not every encoding is base64 — hex is just as common.",
+]
+
 
 def export_sarissa_manifest(result: dict) -> None:
     """Stub: export scenario manifest for Sarissa ingestion."""
@@ -133,6 +150,9 @@ def generate(template: str, difficulty: int, seed: int,
     elif template == "ios":
         zip_path = generate_ios(difficulty, scenario_dir, flag)
         hints = IOS_HINTS
+    elif template == "macos":
+        zip_path = generate_macos(difficulty, scenario_dir, flag)
+        hints = MACOS_HINTS
     store_solution(scenario_dir, flag, hints)
     append_entry(scenario_id, template, difficulty, seed)
 
@@ -176,4 +196,13 @@ def generate_template_f(config: TemplateFConfig) -> bytes:
     random.seed(config.seed)
 
     _, data = build_challenge_f(config)
+    return data
+
+
+def generate_template_g(config: TemplateGConfig) -> bytes:
+    """Build a standalone Template G zip from config; return zip bytes.
+    Seeds the shared random stream here, per the seed application rule."""
+    random.seed(config.seed)
+
+    _, data = build_challenge_g(config)
     return data
