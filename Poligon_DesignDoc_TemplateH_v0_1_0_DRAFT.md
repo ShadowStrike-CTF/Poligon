@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Status | **DRAFT** — for R's review. Do not start a build session until it is approved |
+| Status | **APPROVED** by R (2026-11-06). Build session may start from the Digger prompt |
 | Brief | M/1.1.15 |
-| Template name | `ios_apps` (Template H) — **R to confirm**; `ios` is already Template F |
+| Template name | `ios_apps` (Template H) — **R confirmed**; `ios` stays Template F |
 | Module | `src/poligon/core/templates/template_h.py` |
 | Target release | Poligon 1.6.0 → **1.7.0** (new capability = MINOR). No tag pushed |
 | Repo state at drafting | HEAD `3c1b2ae` (merge of PR #19, Template G), `pyproject.toml` at 1.6.0, tree clean |
@@ -264,7 +264,12 @@ Parametrized suites pick up `"ios_apps"` automatically: INV-P1 ×3 + `solution_o
 The build session's Step 1 must check these against primary sources (a real `.schema` dump, iLEAPP / APOLLO / mvt parsers, the Treska Ph12 brief):
 
 1. **`ZCALLRECORD` columns** — expected `Z_PK, Z_ENT, Z_OPT, ZANSWERED, ZCALLTYPE, ZDISCONNECTED_CAUSE, ZFACE_TIME_DATA, ZNUMBER_AVAILABILITY, ZORIGINATED, ZREAD, ZDATE, ZDURATION, ZADDRESS, ZDEVICE_ID, ZISO_COUNTRY_CODE, ZLOCATION, ZNAME, ZSERVICE_PROVIDER, ZUNIQUE_ID`. Check iOS 15–18.
-2. **`ZCALLTYPE` meaning.** The brief says 1 = incoming, 2 = outgoing, 3 = missed. Parsers I recall use `ZCALLTYPE` for the *kind* of call (1 phone, 8 FaceTime video, 16 FaceTime audio) and derive direction from `ZORIGINATED` and missed from `ZORIGINATED = 0 AND ZANSWERED = 0`. If so, the brief's mapping is wrong for real data and Treska Ph12 needs the same correction.
+2. **`ZCALLTYPE` meaning — R-flagged, must be settled before any CallHistory code is written.**
+   - The brief (Q4) says `ZCALLTYPE` 1 = incoming, 2 = outgoing, 3 = missed.
+   - Maintained parsers as recalled (iLEAPP, APOLLO — to confirm) use `ZCALLTYPE` for the *kind* of call: 1 = phone, 8 = FaceTime video, 16 = FaceTime audio (other values for third-party CallKit apps).
+   - Direction then comes from `ZORIGINATED` (1 = outgoing, 0 = incoming), and a missed call is `ZORIGINATED = 0 AND ZANSWERED = 0`.
+   - **Build rule:** generate per the verified meaning. If the recalled meaning is confirmed, Template H writes `ZCALLTYPE` as the call kind (mostly 1), and the difficulty 3 missed call is defined and tested as `ZORIGINATED = 0 AND ZANSWERED = 0` with `ZDURATION = 0.0` — never as `ZCALLTYPE = 3`. Report the finding in the build's Step 1.
+   - If confirmed, the brief's Q4 mapping is wrong for real data, and the Treska Ph12 brief needs the same correction (raise with Pumpkin).
 3. **`ZADDRESS` type** — TEXT or BLOB on current iOS.
 4. **WhatsApp iOS location** — `private/var/mobile/Containers/Shared/AppGroup/<UUID>/ChatStorage.sqlite`, group `group.net.whatsapp.WhatsApp.shared`. The brief's `Library/Containers/net.whatsapp.WhatsApp/Documents/` is the **macOS** sandbox layout.
 5. **WhatsApp columns** — `ZWACHATSESSION(Z_PK, ZCONTACTJID, ZPARTNERNAME, ZSESSIONTYPE, ZLASTMESSAGEDATE, ZMESSAGECOUNTER)`, `ZWAMESSAGE(Z_PK, ZCHATSESSION, ZISFROMME, ZMESSAGEDATE, ZTEXT, ZFROMJID, ZTOJID, ZMEDIAITEM, ZMESSAGETYPE, ZSTANZAID)`, `ZWAMEDIAITEM(Z_PK, ZMESSAGE, ZMEDIALOCALPATH, ZTITLE, ZFILESIZE)`. Must match the Treska Ph12 brief (brief Q6 says it is authoritative).
@@ -275,10 +280,13 @@ The build session's Step 1 must check these against primary sources (a real `.sc
 
 ## Decisions for R
 
+R approved the doc on 2026-11-06 and confirmed R2. R3–R9 were not individually overridden, so the build follows the recommendations below; any one can still be changed before the build session starts.
+
+
 | # | Question | Recommendation |
 |---|---|---|
 | R1 | Reframe as generator (vs parser) | **Taken** this session: generator |
-| R2 | Template name | `ios_apps` |
+| R2 | Template name | **Confirmed by R:** `ios_apps` |
 | R3 | Difficulty 3 flag-shaped decoys (departs from F/G; follows D) | Yes, 3 decoy `ref:` lines |
 | R4 | Decoy App Group folders | Yes, 2 |
 | R5 | Media-name lengths | Random 32–96 hex chars |
