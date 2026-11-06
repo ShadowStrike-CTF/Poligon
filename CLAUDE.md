@@ -208,6 +208,9 @@ templates/template_g.py; template name "macos".
   ZDATA · hex as common as base64
 - Shared test helpers (R decision, strengthening only): test_flag_absence._haystacks and
   test_properties._sqlite_records gunzip gzip-magic BLOB cells inside SQLite members
+- test_web.py F12 test used "macos" as its unknown template; now "no-such-template"
+  (R-approved — same assertions, nothing loosened)
+- chat.db contact numbers are drawn unique (chat.guid is UNIQUE; 555-01xx is ~79k values)
 - Tests: 325 → 361 in all (256 regular + 105 property): tests/test_template_g.py +16;
   test_flag_absence +4 (INV-P1 ×3, solution outside ×1); test_flag_exposure +1;
   test_properties +15 (5 × 3 difficulties)

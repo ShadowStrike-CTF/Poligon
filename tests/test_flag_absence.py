@@ -28,6 +28,7 @@ from poligon.core.templates.template_e import EVENTS_NAME
 SEEDS = (1, 42, 1337)
 ZIP_MAGIC = b"PK\x03\x04"
 GZIP_MAGIC = b"\x1f\x8b"
+SQLITE_MAGIC = b"SQLite format 3\x00"
 B64_TOKEN = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
 HEX_TOKEN = re.compile(r"[0-9a-f]{16,}")
 
@@ -47,9 +48,30 @@ def _needles(flag: str) -> list[bytes]:
     return out
 
 
+def _sqlite_gzip_blobs(data: bytes):
+    """Yield (table.column#rowid, gunzipped bytes) for every gzip BLOB cell
+    of a SQLite database (e.g. Notes ZICNOTEDATA.ZDATA)."""
+    con = sqlite3.connect(":memory:")
+    try:
+        con.deserialize(data)
+        tables = [r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'")]
+        for table in tables:
+            cols = [r[1] for r in con.execute(f'PRAGMA table_info("{table}")')]
+            for row in con.execute(f'SELECT rowid, * FROM "{table}"'):
+                for col, value in zip(cols, row[1:]):
+                    if isinstance(value, bytes) and \
+                            value.startswith(GZIP_MAGIC):
+                        yield (f"{table}.{col}#{row[0]}",
+                               gzip.decompress(value))
+    finally:
+        con.close()
+
+
 def _haystacks(zip_bytes: bytes, where: str = ""):
     """Yield (location, lowercased bytes) for every name, member, comment.
-    Nested zip / gzip members are opened and scanned too."""
+    Nested zip / gzip members are opened and scanned too, and so are gzip
+    BLOBs inside SQLite members."""
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         yield f"{where}<comment>", zf.comment.lower()
         for name in zf.namelist():
@@ -65,6 +87,9 @@ def _haystacks(zip_bytes: bytes, where: str = ""):
                 yield from _haystacks(data, f"{loc}!")
             elif data.startswith(GZIP_MAGIC):
                 yield f"{loc}!<gunzip>", gzip.decompress(data).lower()
+            elif data.startswith(SQLITE_MAGIC):
+                for cell, blob in _sqlite_gzip_blobs(data):
+                    yield f"{loc}!{cell}<gunzip>", blob.lower()
 
 
 @pytest.mark.parametrize("difficulty", DIFFICULTIES)
