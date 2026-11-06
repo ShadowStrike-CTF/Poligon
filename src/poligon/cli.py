@@ -16,7 +16,8 @@ from poligon.core.config import add_allow_plugin_arg, allowlist
 from poligon.core.generate import generate  # NEVER from poligon.core import generate
 from poligon.core.plugins import load_plugins
 
-_TEMPLATES = {"android", "filesystem", "evidence", "browser", "evtx", "ios"}
+_TEMPLATES = {"android", "filesystem", "evidence", "browser", "evtx", "ios",
+              "macos"}
 
 
 class _Parser(argparse.ArgumentParser):

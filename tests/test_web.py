@@ -206,8 +206,11 @@ def test_trusted_host_rejects_external(client):
 # F12 — GenerateRequest validates against core TEMPLATES / DIFFICULTIES.
 
 def test_generate_rejects_unknown_template(client):
+    # Use a name that can never become a template — "macos" was the example
+    # here until Template G made it real (v1.6.0).
     res = client.post("/api/generate",
-                      json={"template": "macos", "seed": 42, "difficulty": 1})
+                      json={"template": "no-such-template", "seed": 42,
+                            "difficulty": 1})
     assert res.status_code == 422
     err = res.json()["detail"][0]
     assert err["loc"] == ["body", "template"]

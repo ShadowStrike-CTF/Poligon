@@ -5,6 +5,7 @@
 
 import base64
 import binascii
+import gzip
 import io
 import re
 import sqlite3
@@ -35,6 +36,7 @@ PAIRS = pytest.mark.parametrize(
     [(t, d) for t in TEMPLATES for d in DIFFICULTIES])
 SEEDS = st.integers(min_value=0, max_value=2**64 - 1)
 SQLITE_MAGIC = b"SQLite format 3\x00"
+GZIP_MAGIC = b"\x1f\x8b"
 # Templates whose flag is split across exactly two files.
 SPLIT = {("filesystem", 2), ("evidence", 3)}
 
@@ -64,7 +66,14 @@ def _sqlite_records(name, data):
             "SELECT name FROM sqlite_master WHERE type = 'table'")]
         for table in tables:
             for row in con.execute(f'SELECT rowid, * FROM "{table}"'):
-                text = "\n".join(v for v in row[1:] if isinstance(v, str))
+                # gzip BLOBs (Notes ZICNOTEDATA.ZDATA) are unwrapped so the
+                # text they carry is searched too.
+                text = "\n".join(
+                    v if isinstance(v, str)
+                    else gzip.decompress(v).decode("utf-8", "ignore")
+                    for v in row[1:]
+                    if isinstance(v, str)
+                    or (isinstance(v, bytes) and v.startswith(GZIP_MAGIC)))
                 yield (name, table, row[0]), text
     finally:
         con.close()
