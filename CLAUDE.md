@@ -16,6 +16,7 @@ templates/evidence.py — Template C (evidence package; flag split at difficulty
 templates/browser.py — Template D (Chrome History SQLite)
 templates/template_e.py — Template E (JSON EVTX export)
 templates/template_f.py — Template F (iOS FFS extraction)
+templates/template_g.py — Template G (macOS FFS extraction)
 flag.py — flag generation + solution.json storage
 history.py — append-only training record (~/.poligon/history.json)
 config.py — read-only ~/.poligon/config.toml (plugins.allow) + --allow-plugin helper
@@ -109,6 +110,117 @@ extracts/device_NN/{notes.txt,browser_history.csv} — device count = difficulty
   (seeds there — templates/template_f.py never seeds)
 - Seed test is logical (same flag, same DB/table/row) — never byte-identical
 - Tests: 70 → 77 (tests/test_template_f.py)
+
+## Template G — macos (v1.6.0)
+Design doc: Poligon_DesignDoc_TemplateG_v0_1_0_DRAFT.md (M/1.1.14). Module:
+templates/template_g.py; template name "macos".
+- Destination: a seized Mac, imaged as a macOS Full File System (FFS) extraction
+  (Magnet / Cellebrite / mac_apt layout). The solver finds the one artefact carrying the
+  encoded flag, parses it with the right tool (text → SQLite → gunzip + protobuf) and
+  decodes it. Real macOS Data-volume paths, NEVER Finder/iTunes backup layouts
+  (Manifest.db, domain folders)
+- Zip layout — all ten members under macos_extraction/ present at EVERY difficulty
+  (<u> = seeded short user name, [a-z]{3,12}, one per challenge):
+  macos_extraction/
+    Users/<u>/.zsh_history                                                   ← difficulty 1
+    Users/<u>/.zsh_sessions/<UUID>.history                                   ← decoy
+    Users/<u>/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2 ← difficulty 2 (SQLite, no extension)
+    Users/<u>/Library/Group Containers/group.com.apple.notes/NoteStore.sqlite ← difficulty 3
+    Users/<u>/Library/Messages/chat.db                                       ← decoy (SMS_SCHEMA)
+    Users/<u>/Library/Safari/History.db                                      ← decoy (SAFARI_SCHEMA)
+    Users/<u>/Library/Application Support/Knowledge/knowledgeC.db            ← decoy (KNOWLEDGEC_SCHEMA)
+    Users/<u>/Library/LaunchAgents/com.<word>.<word>.plist                   ← decoy (XML plist)
+    System/Library/CoreServices/SystemVersion.plist                          ← seeded metadata
+    acquisition_log.txt                                                      ← seeded metadata + SHA-256s
+  challenge.txt
+- Difficulty → flag location (exactly one per challenge; raw flag and inner value never
+  in any member, member name or zip comment):
+  difficulty 1 → .zsh_history: one command `echo <encode_b64(flag)> | base64 -d > ~/.cache/.k`
+                 at a random position among Faker shell commands
+  difficulty 2 → QuarantineEventsV2 LSQuarantineEvent.LSQuarantineDataURLString of one row:
+                 https://<word>.example/files/<encode_hex(flag)>/<word>.dmg
+                 (hex: base64's "/" breaks a URL path segment — Template D rule)
+  difficulty 3 → NoteStore.sqlite: ZICCLOUDSYNCINGOBJECT.ZNOTEDATA (integer FK) →
+                 ZICNOTEDATA.ZDATA = gzip(protobuf); note text holds `ref: <encode_b64(flag)>`
+                 (in the body, never ZTITLE1). Core Data FK filled both ways
+                 (ZICNOTEDATA.ZNOTE → note Z_PK) so Ciofeca's parser join works too
+- Protobuf: NoteStoreProto{2: Document{2: version, 3: Note{2: note_text}}} — hand-written
+  varint + length-delimited encoder, NO new dependency. Every note (decoys too) goes
+  through the same gzip+protobuf path; gzip mtime from the seeded note time
+- NoteStore subset: ZICCLOUDSYNCINGOBJECT(Z_PK, Z_ENT, Z_OPT, ZIDENTIFIER, ZFOLDER,
+  ZNOTEDATA, ZMARKEDFORDELETION, ZCREATIONDATE3, ZMODIFICATIONDATE1, ZTITLE1, ZTITLE2),
+  ZICNOTEDATA(Z_PK, Z_ENT, Z_OPT, ZNOTE, ZDATA). No ZSNIPPET (a plaintext snippet would
+  bypass the blob). One folder row (ZTITLE2 "Notes") + 8–15 notes
+- Encoders: vendored encode_b64 / encode_hex only — no inline base64, no new scheme
+- Decoys: Faker noise only. No flag-shaped decoys at any difficulty (R decision, F-style);
+  no other `ref:` lines or `echo … | base64 -d` lines anywhere
+- Reuse (R decision): import SMS_SCHEMA, SAFARI_SCHEMA, KNOWLEDGEC_SCHEMA, _serialize,
+  _to_cocoa, COCOA_EPOCH (and same-meaning helpers: _make_faker, _guid, _flag_prefix,
+  _phone, _host, _version, the 2025 window constants) directly from template_f.py —
+  never copy them, no shared module until a third template needs them
+- Seed: random.seed() only in generate() and generate_template_g(TemplateGConfig) -> bytes;
+  template_g.py never seeds. Faker via fake.random = random.random.__self__; no Random()
+  instances; UUIDs from random.getrandbits(128), never uuid.uuid4() in the template
+- Timestamps (fixed 2025 window, never the wall clock):
+  - Cocoa seconds (2001-01-01): Safari visit_time, knowledgeC ZSTARTDATE/ZENDDATE,
+    LSQuarantineTimeStamp, Notes ZCREATIONDATE3/ZMODIFICATIONDATE1
+  - Cocoa nanoseconds: chat.db message.date
+  - Unix epoch seconds: .zsh_history + .zsh_sessions lines `: <ts>:0;cmd` — the ONE
+    Unix-time field (zsh is not an Apple framework); a test asserts it
+  - Format-defined, derived from the seed: gzip header mtime (RFC 1952), zip member times
+- zsh: Apple's /etc/zshrc does NOT set EXTENDED_HISTORY (checked zsh-84…zsh-118). Both
+  history files use the extended format anyway (common user config); challenge.txt says
+  the user's shell profile enabled it. zsh writes both files with the same options
+- SystemVersion.plist: plistlib FMT_XML (R decision; also the LaunchAgent), keys
+  ProductBuildVersion, ProductCopyright, ProductName, ProductUserVisibleVersion,
+  ProductVersion — iOSSupportVersion omitted (per-build value unverified). Fixed table of
+  verified (version, build, model) combos, all released before 2025-06:
+  14.7.1/23H222/Mac14,2 · 14.7.6/23H626/Mac15,3 · 15.2/24C101/Mac16,1 ·
+  15.3.2/24D81/Mac14,3 · 15.4.1/24E263/Mac15,12 · 15.5/24F74/Mac16,1
+- Verify-before-build findings (M/1.1.14 Step 1):
+  - LSQuarantineEvent: 11 columns confirmed (plaso, mac_apt, artemis) — EventIdentifier
+    TEXT PK, TimeStamp REAL (Cocoa), AgentBundleIdentifier, AgentName, DataURLString,
+    SenderName, SenderAddress, TypeNumber INTEGER, OriginTitle, OriginURLString,
+    OriginAlias BLOB. Uppercase UUID identifier and single-table DB: unconfirmed, assumed
+  - Notes protobuf field numbers 2 → 3 → 2 confirmed (Ciofeca notestore.proto); ZDATA is
+    gzip, not raw zlib. Deviations from the design doc: ZCREATIONDATE3 (iOS 15+/macOS 12+)
+    instead of ZCREATIONDATE1; ZICNOTEDATA.ZNOTE back-reference added
+- Invariants:
+  G-1 INV-P1: flag / inner value absent from every member, name, comment — including
+      gunzipped gzip BLOBs inside SQLite (test_flag_absence._haystacks opens them)
+  G-2 exactly one artefact carries the encoded flag; the other nine hold neither
+      encode_b64(flag) nor encode_hex(flag), Notes blobs gunzipped
+  G-3 same seed → same flag, same artefact, same row/line (logical identity)
+  G-4 synthetic only: Faker + hand-crafted; reserved TLDs; 555-01xx; fictional tools;
+      random serials/UUIDs; no dslocal plists, hashes, keychains or Apple binaries
+  G-5 SQLite in memory only (template_f._serialize); no .db or temp file on disk
+  G-6 challenge.txt uses _flag_prefix(flag), never a hardcoded flag{...}
+  G-7 INV-P3: /api/generate and /api/history expose no flag form, scenario_dir or zip_path
+  G-8 no random.seed(), Random() or uuid4() in template_g.py
+  G-9 every challenge is solvable: decoding the planted value gives solution.json's flag
+- ZIP_NAME = "challenge.zip" for generate(); build_challenge() returns
+  (poligon_template_g_<uuid>.zip, bytes); generate_macos(difficulty, scenario_dir, flag)
+- generate() dispatch: explicit `elif template == "macos":` — no dispatch dict; "macos"
+  added to TEMPLATES, cli.py _TEMPLATES and the web dropdown
+  (`<option value="macos">macOS extraction (FFS)</option>`); web validators read TEMPLATES (F12)
+- MACOS_HINTS: zsh default shell since Catalina · databases without extensions (check the
+  header) · Apple time from 2001 (zsh the exception) · NoteStore Core Data join + unwrap
+  ZDATA · hex as common as base64
+- Shared test helpers (R decision, strengthening only): test_flag_absence._haystacks and
+  test_properties._sqlite_records gunzip gzip-magic BLOB cells inside SQLite members
+- Tests: 325 → 361 in all (256 regular + 105 property): tests/test_template_g.py +16;
+  test_flag_absence +4 (INV-P1 ×3, solution outside ×1); test_flag_exposure +1;
+  test_properties +15 (5 × 3 difficulties)
+- Version 1.5.2 → 1.6.0 (MINOR). No tag pushed
+- What NOT to do:
+  - Never use Unix epoch for an Apple-framework field; never "fix" zsh history to Cocoa
+  - Never copy Template F schemas/helpers — import them
+  - Never add a protobuf (or any new) dependency
+  - Never add flag-shaped decoys, extra `ref:` lines or extra `echo … | base64 -d` lines
+  - Never add a ZSNIPPET or other plaintext copy of a note body
+  - Never write a .db / temp file while building the zip
+  - Never weaken INV-P1 / INV-P3 or the gzip-BLOB scanning to get green
+  - Never push a tag
 
 ## CLI: src/poligon/cli.py (thin wrapper over core)
 ## Web: src/poligon/web/main.py (FastAPI; PORT = 7333 single constant; create_app() + main() launcher)
