@@ -17,6 +17,8 @@ templates/browser.py — Template D (Chrome History SQLite)
 templates/template_e.py — Template E (JSON EVTX export)
 templates/template_f.py — Template F (iOS FFS extraction)
 templates/template_g.py — Template G (macOS FFS extraction)
+templates/template_h.py — Template H (iOS FFS extraction, apps: WhatsApp + Call History)
+templates/_apple.py — shared Apple FFS helpers (F, G, H import from here)
 flag.py — flag generation + solution.json storage
 history.py — append-only training record (~/.poligon/history.json)
 config.py — read-only ~/.poligon/config.toml (plugins.allow) + --allow-plugin helper
@@ -223,6 +225,121 @@ templates/template_g.py; template name "macos".
   - Never add a ZSNIPPET or other plaintext copy of a note body
   - Never write a .db / temp file while building the zip
   - Never weaken INV-P1 / INV-P3 or the gzip-BLOB scanning to get green
+  - Never push a tag
+
+## Template H — ios_apps (v1.7.0)
+Design doc: Poligon_DesignDoc_TemplateH_v0_1_0_DRAFT.md (M/1.1.15, approved). Module:
+templates/template_h.py; template name "ios_apps" ("ios" stays Template F).
+- Destination: the same kind of seized iPhone as Template F (iOS FFS extraction), but the
+  evidence is in third-party app data: WhatsApp's ChatStorage.sqlite and Call History.
+  Poligon is the generator here — no input parsing, flag scanning, WAL handling or
+  missing_artifacts (those belong to the parser side)
+- Zip layout — all members at EVERY difficulty (<G> = seeded uppercase UUID):
+  ios_extraction/
+    private/var/mobile/Containers/Shared/AppGroup/<G_wa>/ChatStorage.sqlite        ← flag carrier (all difficulties)
+    private/var/mobile/Containers/Shared/AppGroup/<G_wa>/.com.apple.mobile_container_manager.metadata.plist
+                                                         ← MCMMetadataIdentifier = group.net.whatsapp.WhatsApp.shared
+    private/var/mobile/Containers/Shared/AppGroup/<G_x>/.com.apple.mobile_container_manager.metadata.plist  ×2
+                                                         ← decoy groups, group.com.<word>.<word>, no DB
+    private/var/mobile/Library/CallHistoryDB/CallHistory.storedata  ← pivot at difficulty 3, never the flag
+    private/var/mobile/Library/SMS/sms.db                           ← decoy (F builder)
+    private/var/mobile/Library/Safari/History.db                    ← decoy (F builder)
+    private/var/mobile/Library/AddressBook/AddressBook.sqlitedb     ← decoy (F builder, no Note flag)
+    acquisition_log.txt                                             ← F builder: device + SHA-256s
+  challenge.txt
+  App Group folder order is shuffled; challenge.txt lists AppGroup/ only as a directory and
+  never names WhatsApp's folder — the solver maps <G> → app through the metadata plist
+- Difficulty → flag location (always ChatStorage.sqlite; exactly one real flag):
+  difficulty 1 → ZWAMESSAGE.ZTEXT of one incoming message: "<Faker lead-in> <encode_b64(flag)>"
+  difficulty 2 → ZWAMESSAGE.ZMEDIAITEM (integer FK) → ZWAMEDIAITEM.ZMEDIALOCALPATH
+                 Message/Media/<jid>/<n0>/<n1>/<encode_hex(flag)>.jpg (hex: "/" rule as D/G).
+                 Decoy names are random hex of even length 32–96 so length never stands out
+  difficulty 3 → the ONE missed incoming call in the final hour of CallHistory → its number →
+                 JID <E.164 without +>@s.whatsapp.net → that chat's `ref: <encode_b64(flag)>`.
+                 3 other chats carry `ref: <encode_b64(generate_flag(prefix))>` decoys
+- R3 decision — flag-shaped decoys at difficulty 3 ONLY (follows Template D, departs from F/G).
+  Decoys never equal the flag, are distinct, one per chat; no `ref:` lines at difficulties 1–2
+- Call History final hour, at EVERY difficulty: exactly one missed incoming call plus 1–3
+  answered calls (all ending before the extraction time); every other call is ≥ 1 h earlier.
+  At difficulty 1–2 the missed caller is a random contact, at 3 a WhatsApp partner
+- Contacts: Template F's _make_device (25–40 contacts) with phone numbers re-drawn unique, so
+  one number maps to exactly one chat; WhatsApp partners (4–7) and ~80 % of calls use it
+- ChatStorage subset (Core Data; entity numbers illustrative):
+  ZWACHATSESSION(Z_PK, Z_ENT, Z_OPT, ZARCHIVED, ZGROUPINFO, ZMESSAGECOUNTER, ZREMOVED,
+    ZSESSIONTYPE, ZLASTMESSAGEDATE, ZCONTACTJID, ZPARTNERNAME)
+  ZWAMESSAGE(Z_PK, Z_ENT, Z_OPT, ZCHATSESSION, ZISFROMME, ZMEDIAITEM, ZMESSAGETYPE (0 text,
+    1 image), ZSTARRED, ZMESSAGEDATE, ZFROMJID, ZTEXT, ZTOJID)
+  ZWAMEDIAITEM(Z_PK, Z_ENT, Z_OPT, ZMESSAGE, ZLATITUDE, ZLONGITUDE, ZMEDIALOCALPATH,
+    ZXMPPTHUMBPATH). Message ↔ media FK filled both ways (iLEAPP joins on ZWAMEDIAITEM.ZMESSAGE).
+  No ZLASTMESSAGETEXT (a second copy of a body would put the flag in two places)
+- CallHistory subset: ZCALLRECORD(Z_PK, Z_ENT, Z_OPT, ZANSWERED, ZCALLTYPE,
+  ZDISCONNECTED_CAUSE, ZFACE_TIME_DATA, ZORIGINATED, ZDATE, ZDURATION, ZADDRESS BLOB,
+  ZISO_COUNTRY_CODE, ZLOCATION, ZSERVICE_PROVIDER). Phone calls only: ZCALLTYPE 1,
+  ZSERVICE_PROVIDER com.apple.Telephony, ZDISCONNECTED_CAUSE 0, ZFACE_TIME_DATA NULL
+- Verify-before-build findings (M/1.1.15 Step 1; iLEAPP callHistory.py / whatsApp.py /
+  appGrouplisting.py, mvt calls.py / whatsapp.py):
+  - ZCALLTYPE is the KIND of call (0 third-party, 1 phone, 8 FaceTime video, 16 FaceTime
+    audio), NOT direction. Direction = ZORIGINATED (0 in / 1 out); missed = ZORIGINATED 0 AND
+    ZANSWERED 0, ZDURATION 0.0. The brief's "ZCALLTYPE 1/2/3 = in/out/missed" is wrong for
+    real data (the parser-side brief needs the same correction)
+  - ZADDRESS is a BLOB on real devices (both parsers decode bytes) — stored as UTF-8 bytes
+  - WhatsApp iOS path AppGroup/<UUID>/ChatStorage.sqlite and Message/Media/<jid>/<x>/<y>/<file>
+    confirmed; Library/Containers/net.whatsapp.WhatsApp/… is the macOS layout
+  - Container plist file name and MCMMetadataIdentifier confirmed
+  - Every column written is read by iLEAPP or mvt. Left out as unconfirmed: ZCALLRECORD
+    ZNAME / ZREAD / ZDEVICE_ID / ZUNIQUE_ID / ZNUMBER_AVAILABILITY; ZWAMESSAGE.ZSTANZAID;
+    ZWAMEDIAITEM.ZFILESIZE; MCMMetadataUUID / MCMMetadataContentClass
+  - Assumed, unconfirmed: binary plist format (FMT_BINARY) for the container plist;
+    com.apple.Telephony as ZSERVICE_PROVIDER
+- Timestamps (fixed 2025 window, never the wall clock): Cocoa seconds for ZMESSAGEDATE,
+  ZLASTMESSAGEDATE, ZDATE, Safari visit_time; Cocoa nanoseconds for sms.db message.date;
+  zip member times from the seeded extraction time
+- Shared module (R6, option a): templates/_apple.py holds SMS / Safari / AddressBook /
+  knowledgeC schemas, COCOA_EPOCH, the 2025 window constants, _TLDS, _serialize, _to_cocoa,
+  _make_faker, _guid, _flag_prefix, _phone, _host, _version, _activity_dt — moved (not copied)
+  from template_f.py, which re-imports them so template_f.<name> still resolves. G and H import
+  them from _apple; F's artefact builders (_make_device, _build_sms_db, _build_safari_db,
+  _build_addressbook_db, _acquisition_log) are imported from template_f
+- Seed: random.seed() only in generate() and generate_template_h(TemplateHConfig) -> bytes;
+  template_h.py never seeds. Faker via _make_faker (fake.random = random.random.__self__);
+  no Random(); UUIDs and hex names from random.getrandbits, never uuid4()
+- Invariants:
+  H-1 INV-P1: raw flag / inner value in no member, member name or zip comment
+  H-2 exactly one member (ChatStorage.sqlite) holds encode_b64(flag) or encode_hex(flag)
+  H-3 same seed → same flag, same table/row, same final-hour missed call (logical identity)
+  H-4 synthetic only: Faker; 555-01xx; reserved TLDs; random UUIDs / UDID; no real media
+  H-5 SQLite in memory only (_serialize); no .db, WAL or temp file on disk
+  H-6 challenge.txt uses _flag_prefix(flag); never names WhatsApp's folder; the missed-call
+      sentence appears at difficulty 3 only
+  H-7 INV-P3: /api/generate and /api/history expose no flag form, scenario_dir or zip_path
+  H-8 no random.seed(), Random(), uuid4() or wall-clock call in template_h.py (AST test)
+  H-9 solvable: decoding the planted value gives solution.json's flag; at difficulty 3 the
+      missed call → JID → chat route lands on the real `ref:` line
+  H-10 decoy `ref:` values ≠ the real flag, distinct, and only at difficulty 3
+- ZIP_NAME = "challenge.zip" for generate(); build_challenge() returns
+  (poligon_template_h_<uuid>.zip, bytes); generate_ios_apps(difficulty, scenario_dir, flag)
+- generate() dispatch: explicit `elif template == "ios_apps":` — no dispatch dict; "ios_apps"
+  added to TEMPLATES, cli.py _TEMPLATES and the web dropdown
+  (`<option value="ios_apps">iOS extraction — apps (FFS)</option>`); web validators read
+  TEMPLATES (F12). CLI: `poligon generate ios_apps 42 --difficulty 3` (seed positional)
+- IOS_APPS_HINTS: app data in UUID containers, plist names the app · Apple time from 2001 ·
+  extension ≠ format (CallHistory.storedata) · WhatsApp Core Data ZMEDIAITEM join · hex as
+  common as base64
+- Shared test helpers unchanged (the flag never sits in a BLOB)
+- Tests: 361 → 402 in all (282 regular + 120 property): tests/test_template_h.py +21
+  (incl. CLI smoke and POST /api/generate); test_flag_absence +4; test_flag_exposure +1;
+  test_properties +15 (5 × 3 difficulties)
+- Version 1.6.0 → 1.7.0 (MINOR). No tag pushed
+- What NOT to do:
+  - Never use ZCALLTYPE as call direction or define a missed call as ZCALLTYPE = 3
+  - Never use the macOS WhatsApp path or backup layouts (Manifest.db, domain folders)
+  - Never add a column no parser source confirms without recording it as assumed
+  - Never add ZLASTMESSAGETEXT or any other second copy of a message body
+  - Never add flag-shaped decoys at difficulties 1–2
+  - Never name WhatsApp's App Group folder in challenge.txt
+  - Never copy shared helpers — import from _apple.py (F builders from template_f.py)
+  - Never write a .db / WAL / temp file while building the zip
+  - Never weaken INV-P1 / INV-P3 to get green
   - Never push a tag
 
 ## CLI: src/poligon/cli.py (thin wrapper over core)
