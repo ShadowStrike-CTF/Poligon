@@ -32,9 +32,14 @@ from poligon.core.templates.template_g import (
     build_challenge as build_challenge_g,
     generate_macos,
 )
+from poligon.core.templates.template_h import (
+    TemplateHConfig,
+    build_challenge as build_challenge_h,
+    generate_ios_apps,
+)
 
 TEMPLATES = ("android", "filesystem", "evidence", "browser", "evtx",
-             "ios", "macos")
+             "ios", "macos", "ios_apps")
 DIFFICULTIES = (1, 2, 3)
 DEFAULT_OUTPUT_DIR = Path.home() / ".poligon" / "scenarios"
 
@@ -104,6 +109,16 @@ MACOS_HINTS = [
     "Not every encoding is base64 — hex is just as common.",
 ]
 
+IOS_APPS_HINTS = [
+    "Third-party app data lives in UUID-named containers — the "
+    "container's metadata plist names the app.",
+    "Apple timestamps count seconds from 2001-01-01, not 1970.",
+    "A file's extension doesn't decide its format — check the header "
+    "(CallHistory.storedata).",
+    "WhatsApp is Core Data: follow ZMEDIAITEM into ZWAMEDIAITEM.",
+    "Not every encoding is base64 — hex is just as common.",
+]
+
 
 def export_sarissa_manifest(result: dict) -> None:
     """Stub: export scenario manifest for Sarissa ingestion."""
@@ -153,6 +168,9 @@ def generate(template: str, difficulty: int, seed: int,
     elif template == "macos":
         zip_path = generate_macos(difficulty, scenario_dir, flag)
         hints = MACOS_HINTS
+    elif template == "ios_apps":
+        zip_path = generate_ios_apps(difficulty, scenario_dir, flag)
+        hints = IOS_APPS_HINTS
     store_solution(scenario_dir, flag, hints)
     append_entry(scenario_id, template, difficulty, seed)
 
@@ -205,4 +223,13 @@ def generate_template_g(config: TemplateGConfig) -> bytes:
     random.seed(config.seed)
 
     _, data = build_challenge_g(config)
+    return data
+
+
+def generate_template_h(config: TemplateHConfig) -> bytes:
+    """Build a standalone Template H zip from config; return zip bytes.
+    Seeds the shared random stream here, per the seed application rule."""
+    random.seed(config.seed)
+
+    _, data = build_challenge_h(config)
     return data

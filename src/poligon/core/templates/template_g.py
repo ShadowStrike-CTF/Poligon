@@ -33,15 +33,15 @@ from typing import Optional
 from faker import Faker
 
 from poligon._vendor.megdan_schema.encoding import encode_b64, encode_hex
-# Reused from Template F (R decision): import, never copy.
-from poligon.core.templates.template_f import (
+# Shared Apple helpers and Template F's Safari builder (R decision): import,
+# never copy.
+from poligon.core.templates._apple import (
     KNOWLEDGEC_SCHEMA,
     SAFARI_SCHEMA,
     SMS_SCHEMA,
     _TS_DAYS,
     _TS_START,
     _activity_dt,
-    _build_safari_db,
     _flag_prefix,
     _guid,
     _host,
@@ -51,6 +51,7 @@ from poligon.core.templates.template_f import (
     _to_cocoa,
     _version,
 )
+from poligon.core.templates.template_f import _build_safari_db
 
 ZIP_NAME = "challenge.zip"
 CHALLENGE_TXT = "challenge.txt"
