@@ -17,7 +17,7 @@ from poligon.core.generate import generate  # NEVER from poligon.core import gen
 from poligon.core.plugins import load_plugins
 
 _TEMPLATES = {"android", "filesystem", "evidence", "browser", "evtx", "ios",
-              "macos"}
+              "macos", "ios_apps"}
 
 
 class _Parser(argparse.ArgumentParser):
