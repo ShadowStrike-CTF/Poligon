@@ -162,10 +162,17 @@ def _make_device(fake: Faker) -> _Device:
         days=random.randint(31, _TS_DAYS),
         seconds=random.randint(8 * 3600, 18 * 3600))
     contacts = []
+    # Unique numbers: chat.guid ("iMessage;-;<phone>") is UNIQUE, and only
+    # ~79k 555-01xx numbers exist, so two contacts can otherwise collide.
+    phones: list[str] = []
     for _ in range(random.randint(25, 40)):
         first, last = fake.first_name(), fake.last_name()
+        phone = _phone()
+        while phone in phones:
+            phone = _phone()
+        phones.append(phone)
         contacts.append({
-            "first": first, "last": last, "phone": _phone(),
+            "first": first, "last": last, "phone": phone,
             "email": f"{first.lower()}.{last.lower()}@{_host(fake)}",
         })
     return _Device(

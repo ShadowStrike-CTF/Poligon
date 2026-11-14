@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from faker import Faker
 
 from poligon.core import history
 from poligon.core.generate import generate, generate_template_f
@@ -245,6 +246,16 @@ def test_template_f_addressbook_multivalues_match_person():
             "AND property = 4", (rowid,))]
         assert len(emails) == 1
         assert emails[0].startswith(f"{first.lower()}.{last.lower()}@")
+
+
+def test_template_f_contact_phones_unique():
+    # chat.guid ("iMessage;-;<phone>") is UNIQUE. These seeds draw a
+    # repeated number for two contacts unless _make_device redraws.
+    for seed in (80, 489, 675, 1086, 1122):
+        random.seed(seed)
+        device = template_f._make_device(Faker())
+        phones = {c["phone"] for c in device.contacts}
+        assert len(phones) == len(device.contacts), seed
 
 
 @pytest.mark.parametrize("edge", ["first", "last"])
